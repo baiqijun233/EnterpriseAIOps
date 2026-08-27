@@ -1,0 +1,13 @@
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local runtime data
+*.sqlite3
+*.db
+*.log
+
+# The downloaded reference repository keeps its own Git history.
+02_Source/reference_multi_agent_aiops/
