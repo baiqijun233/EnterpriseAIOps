@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 from event_bus import EventBus, InMemoryEventBus
-from llm_adapter import LLMClient
 from common.storage import TaskRecord, TaskStore, utc_now
 
 
@@ -81,9 +80,8 @@ class MonitorAgent:
 
 
 class RcaAgent:
-    def __init__(self, topology: dict[str, list[str]] | None = None, llm_client: LLMClient | None = None) -> None:
+    def __init__(self, topology: dict[str, list[str]] | None = None) -> None:
         self.topology = topology or {}
-        self.llm_client = llm_client
 
     def analyze(self, service: str, alert: dict[str, Any]) -> dict[str, Any]:
         if not service:
@@ -98,16 +96,7 @@ class RcaAgent:
             queue.extend(self.topology.get(current, []))
         related = sorted(visited)
         confidence = 0.72 if len(related) > 1 else 0.48
-        result = {"root_cause": f"{service} 近期指标异常", "confidence": confidence, "impact_chain": related, "evidence": alert}
-        if self.llm_client is not None:
-            try:
-                result["explanation"] = self.llm_client.generate(
-                    "请基于结构化证据给出简短根因解释，不要编造不存在的事实。",
-                    {"service": service, "confidence": confidence, "impact_chain": related},
-                )
-            except Exception as exc:
-                result["llm_error"] = str(exc)
-        return result
+        return {"root_cause": f"{service} 近期指标异常", "confidence": confidence, "impact_chain": related, "evidence": alert}
 
 
 class HealAgent:
@@ -131,7 +120,6 @@ class AIOpsOrchestrator:
         topology: dict[str, list[str]] | None = None,
         max_retries: int = 2,
         event_bus: EventBus | None = None,
-        llm_client: LLMClient | None = None,
     ) -> None:
         if not isinstance(max_retries, int) or isinstance(max_retries, bool) or not 0 <= max_retries <= 5:
             raise ValueError("max_retries 必须是 0 到 5 的整数")
@@ -140,7 +128,7 @@ class AIOpsOrchestrator:
         self.rca = RcaAgent(topology or {
             "order-service": ["payment-service", "inventory-service"],
             "payment-service": ["mysql"],
-        }, llm_client=llm_client)
+        })
         self.heal = HealAgent()
         self.change = ChangeAgent()
         self.max_retries = max_retries

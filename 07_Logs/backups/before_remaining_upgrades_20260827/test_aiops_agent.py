@@ -1,7 +1,6 @@
 import sys
 import unittest
 import json
-import importlib.util
 import tempfile
 from threading import Thread
 from urllib.error import HTTPError
@@ -11,12 +10,10 @@ from pathlib import Path
 SOURCE = Path(__file__).resolve().parents[1] / "02_Source" / "agent_tech_portfolio"
 sys.path.insert(0, str(SOURCE))
 
-from aiops_agent import AIOpsOrchestrator, Alert, RcaAgent
+from aiops_agent import AIOpsOrchestrator, Alert
 from api_server import create_server
 from common.storage import TaskStore
 from event_bus import InMemoryEventBus, KafkaEventBus
-from fastapi_app import create_app
-from llm_adapter import DeterministicLLMClient
 
 
 class AIOpsAgentTests(unittest.TestCase):
@@ -118,70 +115,6 @@ class AIOpsAgentTests(unittest.TestCase):
         self.assertEqual(fake.messages[0]["topic"], "aiops.events")
         self.assertEqual(json.loads(fake.messages[0]["value"])["task_id"], "t-1")
         self.assertEqual(fake.flush_calls, 1)
-
-    def test_kafka_consumer_sends_failed_message_to_dlq(self):
-        class FakeMessage:
-            def __init__(self, value):
-                self._value = value
-
-            def error(self):
-                return None
-
-            def value(self):
-                return self._value
-
-        class FakeConsumer:
-            def __init__(self):
-                self.committed = 0
-                self.closed = False
-
-            def subscribe(self, topics):
-                self.topics = topics
-
-            def poll(self, timeout):
-                return FakeMessage(b"{\"task_id\": \"t-2\"}")
-
-            def commit(self, asynchronous=False):
-                self.committed += 1
-
-            def close(self):
-                self.closed = True
-
-        class FakeProducer:
-            def __init__(self):
-                self.messages = []
-
-            def produce(self, **kwargs):
-                self.messages.append(kwargs)
-
-            def flush(self, timeout):
-                return 0
-
-        consumer = FakeConsumer()
-        producer = FakeProducer()
-        bus = KafkaEventBus(
-            producer_factory=lambda config: producer,
-            consumer_factory=lambda config: consumer,
-        )
-        consumed = bus.consume_once("aiops.events", "rca-agent", lambda payload: (_ for _ in ()).throw(RuntimeError("处理失败")))
-        self.assertTrue(consumed)
-        self.assertEqual(consumer.committed, 1)
-        self.assertTrue(consumer.closed)
-        self.assertEqual(producer.messages[0]["topic"], "aiops.events.dlq")
-
-    def test_deterministic_llm_can_explain_rca_without_network(self):
-        result = RcaAgent(
-            {"order-service": ["mysql"]},
-            llm_client=DeterministicLLMClient(),
-        ).analyze("order-service", {"metric": "cpu"})
-        self.assertIn("explanation", result)
-        self.assertNotIn("llm_error", result)
-
-    def test_fastapi_entry_reports_missing_optional_dependency(self):
-        if importlib.util.find_spec("fastapi") is not None:
-            self.skipTest("当前环境已安装 FastAPI")
-        with self.assertRaises(RuntimeError):
-            create_app()
 
     def test_http_api_runs_end_to_end(self):
         server = create_server(port=0)

@@ -50,3 +50,11 @@
 - API 通过 `AIOPS_EVENT_BUS=memory|kafka` 选择事件总线，默认仍为内存模式。
 - 新增可选依赖清单 `requirements-kafka.txt`，未在当前机器安装；当前环境没有 Docker 和 Kafka broker，因此本轮未做真实 broker 端到端验证。
 - 新增事件发布和 Kafka 序列化测试；后续启动真实 Kafka 后，需要补做发布、消费、重试和断线恢复验收。
+
+## 2026-08-27 - 完成剩余适配项
+
+- 新增 `fastapi_app.py` 和 `requirements-fastapi.txt`，提供正式 FastAPI 入口；无 FastAPI 时返回明确安装提示。
+- 新增 `llm_adapter.py`，支持离线确定性客户端和 OpenAI 兼容 HTTP 客户端；RCA 调用失败只记录 `llm_error`，不阻断主流程。
+- Kafka 适配器新增 `consume_once` 和 `<topic>.dlq` 死信队列逻辑，消费成功手动提交 offset。
+- 新增 `docker-compose.kafka.yml` 单节点 Kafka 配置；当前机器无 Docker/Kafka broker，未执行容器启动和真实网络验收。
+- 自动化测试共 12 项，全部通过；Python 编译检查和 `git diff --check` 需在提交前再次执行。

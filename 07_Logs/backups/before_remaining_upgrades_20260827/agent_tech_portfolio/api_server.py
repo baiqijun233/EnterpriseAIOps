@@ -12,7 +12,6 @@ from urllib.parse import parse_qs, urlparse
 
 from aiops_agent import AIOpsOrchestrator, Alert, load_topology
 from event_bus import create_event_bus
-from llm_adapter import DeterministicLLMClient, OpenAICompatibleLLMClient
 from common.storage import TaskStore, record_to_dict
 
 
@@ -30,24 +29,10 @@ def build_orchestrator() -> AIOpsOrchestrator:
         use_kafka=bus_mode == "kafka",
         bootstrap_servers=os.getenv("AIOPS_KAFKA_BOOTSTRAP", "localhost:9092"),
     )
-    llm_mode = os.getenv("AIOPS_LLM", "none").strip().lower()
-    if llm_mode == "deterministic":
-        llm_client = DeterministicLLMClient()
-    elif llm_mode == "openai":
-        llm_client = OpenAICompatibleLLMClient(
-            endpoint=os.getenv("AIOPS_LLM_ENDPOINT", ""),
-            api_key=os.getenv("AIOPS_LLM_API_KEY", ""),
-            model=os.getenv("AIOPS_LLM_MODEL", ""),
-        )
-    elif llm_mode == "none":
-        llm_client = None
-    else:
-        raise ValueError("AIOPS_LLM 只能是 none、deterministic 或 openai")
     return AIOpsOrchestrator(
         store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
         topology=topology,
         event_bus=event_bus,
-        llm_client=llm_client,
     )
 
 

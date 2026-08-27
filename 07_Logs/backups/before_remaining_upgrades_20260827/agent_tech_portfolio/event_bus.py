@@ -56,7 +56,6 @@ class KafkaEventBus:
         bootstrap_servers: str = "localhost:9092",
         max_retries: int = 3,
         producer_factory: Callable[[dict[str, Any]], Any] | None = None,
-        consumer_factory: Callable[[dict[str, Any]], Any] | None = None,
     ) -> None:
         if not bootstrap_servers or not isinstance(bootstrap_servers, str):
             raise ValueError("bootstrap_servers 必须是非空字符串")
@@ -65,7 +64,6 @@ class KafkaEventBus:
         self.bootstrap_servers = bootstrap_servers
         self.max_retries = max_retries
         self._producer_factory = producer_factory
-        self._consumer_factory = consumer_factory
         self._producer: Any | None = None
 
     def _get_producer(self) -> Any:
@@ -107,73 +105,6 @@ class KafkaEventBus:
             except Exception as exc:  # Kafka 客户端异常类型需保持可选依赖
                 last_error = exc
         raise RuntimeError(f"Kafka 事件发布失败: {last_error}") from last_error
-
-    def consume_once(
-        self,
-        topic: str,
-        group_id: str,
-        handler: Callable[[dict[str, Any]], Any],
-        timeout: float = 1.0,
-    ) -> bool:
-        """消费一条消息；处理失败时写入 `<topic>.dlq` 并确认原消息。"""
-        if not isinstance(group_id, str) or not group_id.strip():
-            raise ValueError("group_id 不能为空")
-        if not callable(handler):
-            raise ValueError("handler 必须可调用")
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout 必须是正数")
-        consumer = self._create_consumer(group_id)
-        consumer.subscribe([topic])
-        try:
-            message = consumer.poll(timeout=float(timeout))
-            if message is None:
-                return False
-            if message.error():
-                raise RuntimeError(f"Kafka 消费失败: {message.error()}")
-            raw_value = message.value()
-            try:
-                payload = json.loads(raw_value.decode("utf-8"))
-                if not isinstance(payload, dict):
-                    raise ValueError("消息 payload 必须是对象")
-                handler(payload)
-            except Exception as exc:
-                self._publish_dead_letter(topic, raw_value, str(exc))
-            consumer.commit(asynchronous=False)
-            return True
-        finally:
-            consumer.close()
-
-    def _create_consumer(self, group_id: str) -> Any:
-        config = {
-            "bootstrap.servers": self.bootstrap_servers,
-            "group.id": group_id,
-            "auto.offset.reset": "latest",
-            "enable.auto.commit": False,
-        }
-        if self._consumer_factory is not None:
-            return self._consumer_factory(config)
-        try:
-            from confluent_kafka import Consumer
-        except ImportError as exc:
-            raise RuntimeError(
-                "Kafka 模式需要安装 confluent-kafka：python -m pip install confluent-kafka"
-            ) from exc
-        return Consumer(config)
-
-    def _publish_dead_letter(self, topic: str, raw_value: bytes, error: str) -> None:
-        producer = self._get_producer()
-        payload = {
-            "original_topic": topic,
-            "error": error,
-            "raw_value": raw_value.decode("utf-8", errors="replace"),
-        }
-        producer.produce(
-            topic=f"{topic}.dlq",
-            value=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        )
-        remaining = producer.flush(timeout=5)
-        if remaining:
-            raise TimeoutError(f"Kafka DLQ 仍有 {remaining} 条消息未发送")
 
     def close(self) -> None:
         if self._producer is not None:

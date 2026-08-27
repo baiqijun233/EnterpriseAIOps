@@ -26,14 +26,6 @@ $env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 python -m api_server
 ```
 
-启动 FastAPI API（可选）：
-
-```powershell
-python -m pip install -r 02_Source\agent_tech_portfolio\requirements-fastapi.txt
-$env:PYTHONPATH = "02_Source\agent_tech_portfolio"
-python -m fastapi_app
-```
-
 接口示例：
 
 ```powershell
@@ -55,9 +47,5 @@ $env:AIOPS_KAFKA_BOOTSTRAP = "localhost:9092"
 $env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 python -m api_server
 ```
-
-项目提供 `docker-compose.kafka.yml` 作为单节点 Kafka 启动配置。启动后可将 `AIOPS_EVENT_BUS` 设置为 `kafka`；默认 Topic 为 `aiops.events`，消费失败消息进入 `aiops.events.dlq`。
-
-LLM 模式：默认关闭。设置 `AIOPS_LLM=deterministic` 可离线生成解释；接入 OpenAI 兼容服务时设置 `AIOPS_LLM=openai`、`AIOPS_LLM_ENDPOINT`、`AIOPS_LLM_API_KEY` 和 `AIOPS_LLM_MODEL`。密钥只从环境变量读取，不写入仓库。
 
 Kafka 发送失败不会让主流程直接崩溃，错误会记录在任务的 `event_bus_errors` 字段，便于降级和排查。
