@@ -58,3 +58,19 @@
 - Kafka 适配器新增 `consume_once` 和 `<topic>.dlq` 死信队列逻辑，消费成功手动提交 offset。
 - 新增 `docker-compose.kafka.yml` 单节点 Kafka 配置；当前机器无 Docker/Kafka broker，未执行容器启动和真实网络验收。
 - 自动化测试共 12 项，全部通过；Python 编译检查和 `git diff --check` 需在提交前再次执行。
+
+## 2026-08-27 - 可选生产栈与真实环境准备
+
+- 新增 Neo4j、Redis/Celery 适配器和 Prometheus 文本指标接口。
+- 新增 `requirements-production.txt` 和 `docker-compose.production.yml`，可统一启动 Kafka、Redis、Neo4j。
+- Docker 守护进程已可用；当前先完成容器启动和健康检查，再执行真实 Kafka/Redis/Neo4j 连接验收。
+- FastAPI TestClient 已改为真实路由测试，不再仅验证缺依赖提示。
+
+## 2026-08-27 - 真实基础设施验收
+
+- Docker Compose 配置校验通过，启动本项目 Kafka 和 Neo4j 容器；Redis 复用另一项目已运行且健康的 `localhost:6379` 实例，未停止或覆盖其他服务。
+- Kafka 真实发布通过，并由独立消费者从 `aiops.events` 读到事件。
+- Neo4j 真实连接、示例拓扑写入和依赖查询通过；RCA 可通过 `AIOPS_TOPOLOGY=neo4j` 使用查询结果。
+- Redis 适配器真实入队/出队通过，Celery 真实 Redis broker 连接通过；未启动 Celery worker，避免留下无人处理的生产任务。
+- FastAPI 使用 `8002` 端口真实启动，结合 Neo4j、Kafka、确定性 LLM 完成健康检查、指标抓取和故障处理，返回 `resolved`。
+- 本阶段自动化测试共 17 项，全部通过；Python 编译检查通过，差异空白检查通过。

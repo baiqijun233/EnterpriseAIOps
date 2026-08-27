@@ -4,7 +4,7 @@
 
 当前核心链路支持阶段级重试、SQLite 检查点保存、等待审批后恢复，以及从 `04_Data\topology.json` 加载服务拓扑。API 重启后可继续查询已保存任务。
 
-默认只依赖 Python 标准库，便于离线演示。Kafka、Neo4j、Redis 和 Celery 都已提供可选适配层，未配置时仍可使用内存总线、JSON 拓扑和 SQLite。
+默认只依赖 Python 标准库，便于离线演示。Kafka 属于可选的生产事件总线适配层，未配置时使用内存总线；Neo4j、Redis 和 Celery 仍属于后续可替换适配层。
 
 运行测试：
 
@@ -56,19 +56,7 @@ $env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 python -m api_server
 ```
 
-项目提供 `docker-compose.kafka.yml` 作为单节点 Kafka 启动配置，也提供 `docker-compose.production.yml` 启动 Kafka、Redis、Neo4j。启动后可将 `AIOPS_EVENT_BUS` 设置为 `kafka`；默认 Topic 为 `aiops.events`，消费失败消息进入 `aiops.events.dlq`。
-
-生产适配依赖可统一安装：
-
-```powershell
-python -m pip install -r 02_Source\agent_tech_portfolio\requirements-production.txt
-```
-
-Prometheus 可抓取 `GET /metrics`，无需额外修改核心流程。
-
-Neo4j 拓扑模式：设置 `AIOPS_TOPOLOGY=neo4j`，并配置 `AIOPS_NEO4J_URI`、`AIOPS_NEO4J_USER`、`AIOPS_NEO4J_PASSWORD`；RCA 会直接查询服务依赖关系。
-
-Redis/Celery 适配器位于 `adapters\task_queue.py`，用于异步任务入队和分发；需要独立启动 Celery worker 才会实际消费任务。
+项目提供 `docker-compose.kafka.yml` 作为单节点 Kafka 启动配置。启动后可将 `AIOPS_EVENT_BUS` 设置为 `kafka`；默认 Topic 为 `aiops.events`，消费失败消息进入 `aiops.events.dlq`。
 
 LLM 模式：默认关闭。设置 `AIOPS_LLM=deterministic` 可离线生成解释；接入 OpenAI 兼容服务时设置 `AIOPS_LLM=openai`、`AIOPS_LLM_ENDPOINT`、`AIOPS_LLM_API_KEY` 和 `AIOPS_LLM_MODEL`。密钥只从环境变量读取，不写入仓库。
 

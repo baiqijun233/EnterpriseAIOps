@@ -1,2 +1,2 @@
-# 可选生产适配依赖；默认内存模式不需要安装。
+# Optional production adapter dependency. Memory mode needs none.
 confluent-kafka==2.8.0

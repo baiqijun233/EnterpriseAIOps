@@ -1,0 +1,5 @@
+# Optional production adapters.
+confluent-kafka==2.8.0
+redis==5.2.1
+neo4j==5.28.1
+celery==5.4.0

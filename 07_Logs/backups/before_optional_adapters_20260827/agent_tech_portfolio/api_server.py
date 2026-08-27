@@ -13,28 +13,16 @@ from urllib.parse import parse_qs, urlparse
 from aiops_agent import AIOpsOrchestrator, Alert, load_topology
 from event_bus import create_event_bus
 from llm_adapter import DeterministicLLMClient, OpenAICompatibleLLMClient
-from metrics import MetricsRegistry
 from common.storage import TaskStore, record_to_dict
-from adapters.neo4j_topology import Neo4jTopologyProvider
 
 
 def build_orchestrator() -> AIOpsOrchestrator:
     data_path = Path(__file__).resolve().parents[2] / "04_Data"
     topology_path = data_path / "topology.json"
-    topology_mode = os.getenv("AIOPS_TOPOLOGY", "json").strip().lower()
-    if topology_mode == "neo4j":
-        topology = Neo4jTopologyProvider(
-            uri=os.getenv("AIOPS_NEO4J_URI", "bolt://localhost:7687"),
-            user=os.getenv("AIOPS_NEO4J_USER", "neo4j"),
-            password=os.getenv("AIOPS_NEO4J_PASSWORD", "aiops_password"),
-        )
-    elif topology_mode == "json":
-        try:
-            topology = load_topology(topology_path)
-        except (FileNotFoundError, ValueError):
-            topology = None
-    else:
-        raise ValueError("AIOPS_TOPOLOGY 只能是 json 或 neo4j")
+    try:
+        topology = load_topology(topology_path)
+    except (FileNotFoundError, ValueError):
+        topology = None
     bus_mode = os.getenv("AIOPS_EVENT_BUS", "memory").strip().lower()
     if bus_mode not in {"memory", "kafka"}:
         raise ValueError("AIOPS_EVENT_BUS 只能是 memory 或 kafka")
@@ -63,9 +51,6 @@ def build_orchestrator() -> AIOpsOrchestrator:
     )
 
 
-metrics = MetricsRegistry()
-
-
 class AIOpsRequestHandler(BaseHTTPRequestHandler):
     """将 HTTP 请求转换为编排器调用，保持无第三方依赖。"""
 
@@ -75,9 +60,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self._send_json({"status": "healthy"})
-            return
-        if parsed.path == "/metrics":
-            self._send_text(metrics.render(), "text/plain; version=0.0.4")
             return
         if parsed.path == "/api/v1/tasks":
             query = parse_qs(parsed.query)
@@ -120,7 +102,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
                 severity=str(payload.get("severity", "high")),
             )
             record = self.orchestrator.handle(alert)
-            metrics.increment("aiops_incidents_created_total")
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
             self._send_json({"error": f"请求参数无效: {exc}"}, HTTPStatus.BAD_REQUEST)
             return
@@ -139,22 +120,12 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
         self._send_json(record_to_dict(record))
 
     def _send_json(self, data: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
-        metrics.increment("aiops_http_responses_total")
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
-
-    def _send_text(self, body: str, content_type: str) -> None:
-        metrics.increment("aiops_http_responses_total")
-        encoded = body.encode("utf-8")
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
 
     def log_message(self, format: str, *args: Any) -> None:
         return

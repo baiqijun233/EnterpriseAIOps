@@ -81,7 +81,7 @@ class MonitorAgent:
 
 
 class RcaAgent:
-    def __init__(self, topology: Any | None = None, llm_client: LLMClient | None = None) -> None:
+    def __init__(self, topology: dict[str, list[str]] | None = None, llm_client: LLMClient | None = None) -> None:
         self.topology = topology or {}
         self.llm_client = llm_client
 
@@ -95,7 +95,7 @@ class RcaAgent:
             if current in visited:
                 continue
             visited.add(current)
-            queue.extend(self._dependencies(current))
+            queue.extend(self.topology.get(current, []))
         related = sorted(visited)
         confidence = 0.72 if len(related) > 1 else 0.48
         result = {"root_cause": f"{service} 近期指标异常", "confidence": confidence, "impact_chain": related, "evidence": alert}
@@ -108,11 +108,6 @@ class RcaAgent:
             except Exception as exc:
                 result["llm_error"] = str(exc)
         return result
-
-    def _dependencies(self, service: str) -> list[str]:
-        if hasattr(self.topology, "get_dependencies"):
-            return list(self.topology.get_dependencies(service))
-        return list(self.topology.get(service, []))
 
 
 class HealAgent:
@@ -252,8 +247,6 @@ class AIOpsOrchestrator:
     def close(self) -> None:
         self.event_bus.close()
         self.store.close()
-        if hasattr(self.rca.topology, "close"):
-            self.rca.topology.close()
 
     def _finish(self, record: TaskRecord, status: str, state: dict[str, Any]) -> TaskRecord:
         finished = TaskRecord(record.task_id, record.task_type, status, state, utc_now())
