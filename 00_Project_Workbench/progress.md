@@ -42,3 +42,11 @@
 - API 正式入口改用 `04_Data\aiops_tasks.sqlite3`，可在重新创建编排器后读取既有任务，验证跨实例恢复。
 - 补充 SQLite 文件句柄关闭逻辑，避免 Windows 测试临时目录清理失败。
 - 复核结果：7 项自动化测试全部通过，Python 编译检查通过，`git diff --check` 无空白错误。
+
+## 2026-08-27 - Kafka 事件总线适配层
+
+- 新增 `event_bus.py`：内存事件总线、可选 Kafka 适配器和事件工厂。
+- 编排器现在发布 `aiops.events` 阶段事件；事件总线故障不会中断运维主流程，会写入 `event_bus_errors`。
+- API 通过 `AIOPS_EVENT_BUS=memory|kafka` 选择事件总线，默认仍为内存模式。
+- 新增可选依赖清单 `requirements-kafka.txt`，未在当前机器安装；当前环境没有 Docker 和 Kafka broker，因此本轮未做真实 broker 端到端验证。
+- 新增事件发布和 Kafka 序列化测试；后续启动真实 Kafka 后，需要补做发布、消费、重试和断线恢复验收。

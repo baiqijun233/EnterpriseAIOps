@@ -13,7 +13,6 @@ sys.path.insert(0, str(SOURCE))
 from aiops_agent import AIOpsOrchestrator, Alert
 from api_server import create_server
 from common.storage import TaskStore
-from event_bus import InMemoryEventBus, KafkaEventBus
 
 
 class AIOpsAgentTests(unittest.TestCase):
@@ -81,40 +80,6 @@ class AIOpsAgentTests(unittest.TestCase):
             finally:
                 first.store.close()
                 second.store.close()
-
-    def test_orchestrator_publishes_stage_events(self):
-        event_bus = InMemoryEventBus()
-        orchestrator = AIOpsOrchestrator(event_bus=event_bus)
-        orchestrator.handle(Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40]))
-        topics = [event["topic"] for event in event_bus.get_events()]
-        self.assertIn("aiops.events", topics)
-
-    def test_kafka_adapter_serializes_event_with_ack_policy(self):
-        class FakeProducer:
-            def __init__(self):
-                self.messages = []
-                self.flush_calls = 0
-
-            def produce(self, **kwargs):
-                self.messages.append(kwargs)
-
-            def flush(self, timeout):
-                self.flush_calls += 1
-                return 0
-
-        fake = FakeProducer()
-        received_config = {}
-
-        def producer_factory(config):
-            received_config.update(config)
-            return fake
-
-        bus = KafkaEventBus(producer_factory=producer_factory)
-        bus.publish("aiops.events", {"task_id": "t-1", "stage": "monitor"})
-        self.assertEqual(received_config["acks"], "all")
-        self.assertEqual(fake.messages[0]["topic"], "aiops.events")
-        self.assertEqual(json.loads(fake.messages[0]["value"])["task_id"], "t-1")
-        self.assertEqual(fake.flush_calls, 1)
 
     def test_http_api_runs_end_to_end(self):
         server = create_server(port=0)

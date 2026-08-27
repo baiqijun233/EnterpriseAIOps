@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -11,7 +10,6 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from aiops_agent import AIOpsOrchestrator, Alert, load_topology
-from event_bus import create_event_bus
 from common.storage import TaskStore, record_to_dict
 
 
@@ -22,17 +20,9 @@ def build_orchestrator() -> AIOpsOrchestrator:
         topology = load_topology(topology_path)
     except (FileNotFoundError, ValueError):
         topology = None
-    bus_mode = os.getenv("AIOPS_EVENT_BUS", "memory").strip().lower()
-    if bus_mode not in {"memory", "kafka"}:
-        raise ValueError("AIOPS_EVENT_BUS 只能是 memory 或 kafka")
-    event_bus = create_event_bus(
-        use_kafka=bus_mode == "kafka",
-        bootstrap_servers=os.getenv("AIOPS_KAFKA_BOOTSTRAP", "localhost:9092"),
-    )
     return AIOpsOrchestrator(
         store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
         topology=topology,
-        event_bus=event_bus,
     )
 
 
@@ -132,4 +122,4 @@ if __name__ == "__main__":
         pass
     finally:
         server.server_close()
-        AIOpsRequestHandler.orchestrator.close()
+        AIOpsRequestHandler.orchestrator.store.close()

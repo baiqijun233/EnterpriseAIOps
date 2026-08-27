@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from event_bus import EventBus, InMemoryEventBus
 from common.storage import TaskRecord, TaskStore, utc_now
 
 
@@ -119,7 +118,6 @@ class AIOpsOrchestrator:
         store: TaskStore | None = None,
         topology: dict[str, list[str]] | None = None,
         max_retries: int = 2,
-        event_bus: EventBus | None = None,
     ) -> None:
         if not isinstance(max_retries, int) or isinstance(max_retries, bool) or not 0 <= max_retries <= 5:
             raise ValueError("max_retries 必须是 0 到 5 的整数")
@@ -132,7 +130,6 @@ class AIOpsOrchestrator:
         self.heal = HealAgent()
         self.change = ChangeAgent()
         self.max_retries = max_retries
-        self.event_bus = event_bus or InMemoryEventBus()
 
     def handle(self, alert: Alert) -> TaskRecord:
         self._validate_alert(alert)
@@ -184,12 +181,6 @@ class AIOpsOrchestrator:
             try:
                 result = action()
                 state["events"].append({"stage": name, "attempt": attempt, "result": result})
-                self._publish_event("aiops.events", {
-                    "task_id": record.task_id,
-                    "stage": name,
-                    "attempt": attempt,
-                    "result": result,
-                }, state)
                 self._checkpoint(record, state)
                 return result
             except Exception as exc:
@@ -198,12 +189,6 @@ class AIOpsOrchestrator:
                     "attempt": attempt,
                     "error": str(exc),
                 })
-                self._publish_event("aiops.events", {
-                    "task_id": record.task_id,
-                    "stage": name,
-                    "attempt": attempt,
-                    "error": str(exc),
-                }, state)
                 if attempt > self.max_retries:
                     raise RuntimeError(f"{name} 阶段重试耗尽: {exc}") from exc
 
@@ -221,20 +206,6 @@ class AIOpsOrchestrator:
 
     def _checkpoint(self, record: TaskRecord, state: dict[str, Any]) -> None:
         self.store.save(TaskRecord(record.task_id, record.task_type, "running", state, utc_now()))
-
-    def _publish_event(self, topic: str, payload: dict[str, Any], state: dict[str, Any]) -> None:
-        """事件总线故障不阻断主流程，但会留下可追踪记录。"""
-        try:
-            self.event_bus.publish(topic, payload)
-        except Exception as exc:
-            state.setdefault("event_bus_errors", []).append({
-                "topic": topic,
-                "error": str(exc),
-            })
-
-    def close(self) -> None:
-        self.event_bus.close()
-        self.store.close()
 
     def _finish(self, record: TaskRecord, status: str, state: dict[str, Any]) -> TaskRecord:
         finished = TaskRecord(record.task_id, record.task_type, status, state, utc_now())
