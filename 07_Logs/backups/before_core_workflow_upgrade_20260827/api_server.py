@@ -5,31 +5,17 @@ from __future__ import annotations
 import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from aiops_agent import AIOpsOrchestrator, Alert, load_topology
-from common.storage import TaskStore, record_to_dict
-
-
-def build_orchestrator() -> AIOpsOrchestrator:
-    data_path = Path(__file__).resolve().parents[2] / "04_Data"
-    topology_path = data_path / "topology.json"
-    try:
-        topology = load_topology(topology_path)
-    except (FileNotFoundError, ValueError):
-        topology = None
-    return AIOpsOrchestrator(
-        store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
-        topology=topology,
-    )
+from aiops_agent import AIOpsOrchestrator, Alert
+from common.storage import record_to_dict
 
 
 class AIOpsRequestHandler(BaseHTTPRequestHandler):
     """将 HTTP 请求转换为编排器调用，保持无第三方依赖。"""
 
-    orchestrator = build_orchestrator()
+    orchestrator = AIOpsOrchestrator()
 
     def do_GET(self) -> None:  # noqa: N802 - 标准库接口名称
         parsed = urlparse(self.path)
@@ -58,9 +44,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
         self._send_json({"error": "路径不存在"}, HTTPStatus.NOT_FOUND)
 
     def do_POST(self) -> None:  # noqa: N802 - 标准库接口名称
-        if self.path.startswith("/api/v1/tasks/") and self.path.endswith("/approval"):
-            self._handle_approval()
-            return
         if self.path != "/api/v1/incidents":
             self._send_json({"error": "路径不存在"}, HTTPStatus.NOT_FOUND)
             return
@@ -81,18 +64,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"请求参数无效: {exc}"}, HTTPStatus.BAD_REQUEST)
             return
         self._send_json(record_to_dict(record), HTTPStatus.CREATED)
-
-    def _handle_approval(self) -> None:
-        task_id = self.path.split("/api/v1/tasks/", 1)[1][:-len("/approval")].strip("/")
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            approved = payload.get("approved")
-            record = self.orchestrator.resume_approval(task_id, approved)
-        except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
-            self._send_json({"error": f"审批参数无效: {exc}"}, HTTPStatus.BAD_REQUEST)
-            return
-        self._send_json(record_to_dict(record))
 
     def _send_json(self, data: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -122,4 +93,3 @@ if __name__ == "__main__":
         pass
     finally:
         server.server_close()
-        AIOpsRequestHandler.orchestrator.store.close()

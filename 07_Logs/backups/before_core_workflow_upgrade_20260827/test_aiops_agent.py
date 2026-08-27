@@ -1,7 +1,6 @@
 import sys
 import unittest
 import json
-import tempfile
 from threading import Thread
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -12,7 +11,6 @@ sys.path.insert(0, str(SOURCE))
 
 from aiops_agent import AIOpsOrchestrator, Alert
 from api_server import create_server
-from common.storage import TaskStore
 
 
 class AIOpsAgentTests(unittest.TestCase):
@@ -32,54 +30,6 @@ class AIOpsAgentTests(unittest.TestCase):
         orchestrator.handle(Alert("order-service", "cpu", 41.0, [40, 41, 39, 42, 40]))
         self.assertEqual(len(orchestrator.store.list_recent(1)), 1)
         self.assertLessEqual(len(orchestrator.store.list_recent(0)), 1)
-
-    def test_failed_stage_retries_and_saves_attempts(self):
-        orchestrator = AIOpsOrchestrator(max_retries=1)
-        original_confirm = orchestrator.monitor.confirm
-        calls = {"count": 0}
-
-        def flaky_confirm(alert):
-            calls["count"] += 1
-            if calls["count"] == 1:
-                raise RuntimeError("模拟监控暂时不可用")
-            return original_confirm(alert)
-
-        orchestrator.monitor.confirm = flaky_confirm
-        result = orchestrator.handle(Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40]))
-        monitor_events = [event for event in result.state["events"] if event["stage"] == "monitor"]
-        self.assertEqual(calls["count"], 2)
-        self.assertIn("error", monitor_events[0])
-        self.assertEqual(monitor_events[-1]["attempt"], 2)
-
-    def test_approval_can_resume_without_rerunning_pipeline(self):
-        orchestrator = AIOpsOrchestrator()
-        calls = {"count": 0}
-
-        def pending_approval(proposal):
-            calls["count"] += 1
-            return {"approved": False, "risk": 0.9, "audit_id": "test-audit"}
-
-        orchestrator.change.approve = pending_approval
-        pending = orchestrator.handle(Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40]))
-        self.assertEqual(pending.status, "awaiting_approval")
-        resumed = orchestrator.resume_approval(pending.task_id, True)
-        self.assertEqual(resumed.status, "resolved")
-        self.assertEqual(calls["count"], 1)
-        self.assertEqual(resumed.state["events"][-1]["stage"], "approval_resume")
-
-    def test_sqlite_task_can_be_read_by_new_orchestrator(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = Path(temp_dir) / "tasks.sqlite3"
-            first = AIOpsOrchestrator(store=TaskStore(database_path))
-            second = AIOpsOrchestrator(store=TaskStore(database_path))
-            try:
-                created = first.handle(Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40]))
-                restored = second.store.get(created.task_id)
-                self.assertIsNotNone(restored)
-                self.assertEqual(restored.status, created.status)
-            finally:
-                first.store.close()
-                second.store.close()
 
     def test_http_api_runs_end_to_end(self):
         server = create_server(port=0)

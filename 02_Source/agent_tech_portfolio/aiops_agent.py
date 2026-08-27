@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import math
+import json
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from common.storage import TaskRecord, TaskStore, utc_now
@@ -17,6 +19,29 @@ class Alert:
     value: float
     baseline: list[float]
     severity: str = "high"
+
+
+def load_topology(path: str | Path) -> dict[str, list[str]]:
+    """加载服务拓扑配置，并拒绝不符合约定的数据。"""
+    config_path = Path(path)
+    if not config_path.is_file():
+        raise FileNotFoundError(f"拓扑文件不存在: {config_path}")
+    try:
+        data = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"拓扑文件读取失败: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("拓扑配置必须是对象")
+    topology: dict[str, list[str]] = {}
+    for service, dependencies in data.items():
+        if not isinstance(service, str) or not service.strip():
+            raise ValueError("拓扑服务名不能为空")
+        if not isinstance(dependencies, list) or any(
+            not isinstance(item, str) or not item.strip() for item in dependencies
+        ):
+            raise ValueError(f"拓扑依赖必须是字符串列表: {service}")
+        topology[service.strip()] = [item.strip() for item in dependencies]
+    return topology
 
 
 class ThreeSigmaDetector:
@@ -88,36 +113,99 @@ class ChangeAgent:
 
 
 class AIOpsOrchestrator:
-    def __init__(self, store: TaskStore | None = None) -> None:
+    def __init__(
+        self,
+        store: TaskStore | None = None,
+        topology: dict[str, list[str]] | None = None,
+        max_retries: int = 2,
+    ) -> None:
+        if not isinstance(max_retries, int) or isinstance(max_retries, bool) or not 0 <= max_retries <= 5:
+            raise ValueError("max_retries 必须是 0 到 5 的整数")
         self.store = store or TaskStore()
         self.monitor = MonitorAgent()
-        self.rca = RcaAgent({"order-service": ["payment-service", "inventory-service"], "payment-service": ["mysql"]})
+        self.rca = RcaAgent(topology or {
+            "order-service": ["payment-service", "inventory-service"],
+            "payment-service": ["mysql"],
+        })
         self.heal = HealAgent()
         self.change = ChangeAgent()
+        self.max_retries = max_retries
 
     def handle(self, alert: Alert) -> TaskRecord:
-        if not isinstance(alert, Alert) or not alert.service or not alert.metric:
-            raise ValueError("alert 必须包含 service 和 metric")
+        self._validate_alert(alert)
         task_id = uuid.uuid4().hex
         state: dict[str, Any] = {"alert": alert.__dict__, "events": []}
         record = TaskRecord(task_id, "aiops", "running", state, utc_now())
         self.store.save(record)
         try:
-            monitor_result = self.monitor.confirm(alert)
-            state["events"].append({"stage": "monitor", "result": monitor_result})
+            monitor_result = self._run_stage(
+                "monitor", lambda: self.monitor.confirm(alert), state, record
+            )
             if not monitor_result["confirmed"]:
                 return self._finish(record, "ignored", state)
-            rca_result = self.rca.analyze(alert.service, monitor_result)
-            state["events"].append({"stage": "rca", "result": rca_result})
-            proposal = self.heal.propose(rca_result)
-            state["events"].append({"stage": "heal", "result": proposal})
-            approval = self.change.approve(proposal)
-            state["events"].append({"stage": "change", "result": approval})
+            rca_result = self._run_stage(
+                "rca", lambda: self.rca.analyze(alert.service, monitor_result), state, record
+            )
+            proposal = self._run_stage(
+                "heal", lambda: self.heal.propose(rca_result), state, record
+            )
+            approval = self._run_stage(
+                "change", lambda: self.change.approve(proposal), state, record
+            )
             state["result"] = {"resolved": approval["approved"], "action": proposal["action"], "approval": approval}
             return self._finish(record, "resolved" if approval["approved"] else "awaiting_approval", state)
         except Exception as exc:
             state["error"] = str(exc)
             return self._finish(record, "failed", state)
+
+    def resume_approval(self, task_id: str, approved: bool) -> TaskRecord:
+        """恢复等待审批的任务，不重复执行前面的 Agent。"""
+        if not task_id or not isinstance(approved, bool):
+            raise ValueError("task_id 不能为空，approved 必须是布尔值")
+        record = self.store.get(task_id)
+        if record is None:
+            raise ValueError("任务不存在")
+        if record.status != "awaiting_approval":
+            raise ValueError("任务当前不在等待审批状态")
+        state = record.state
+        state.setdefault("events", []).append({
+            "stage": "approval_resume",
+            "result": {"approved": approved, "source": "manual"},
+        })
+        state.setdefault("result", {})["resolved"] = approved
+        return self._finish(record, "resolved" if approved else "rejected", state)
+
+    def _run_stage(self, name: str, action: Any, state: dict[str, Any], record: TaskRecord) -> Any:
+        """阶段级重试：失败记录原因，成功后保存检查点。"""
+        for attempt in range(1, self.max_retries + 2):
+            try:
+                result = action()
+                state["events"].append({"stage": name, "attempt": attempt, "result": result})
+                self._checkpoint(record, state)
+                return result
+            except Exception as exc:
+                state["events"].append({
+                    "stage": name,
+                    "attempt": attempt,
+                    "error": str(exc),
+                })
+                if attempt > self.max_retries:
+                    raise RuntimeError(f"{name} 阶段重试耗尽: {exc}") from exc
+
+    @staticmethod
+    def _validate_alert(alert: Alert) -> None:
+        if not isinstance(alert, Alert) or not alert.service or not alert.metric:
+            raise ValueError("alert 必须包含 service 和 metric")
+        if not isinstance(alert.baseline, list) or any(
+            not isinstance(item, (int, float)) or isinstance(item, bool) or not math.isfinite(item)
+            for item in alert.baseline
+        ):
+            raise ValueError("baseline 必须是有限数字列表")
+        if not isinstance(alert.value, (int, float)) or isinstance(alert.value, bool) or not math.isfinite(alert.value):
+            raise ValueError("value 必须是有限数字")
+
+    def _checkpoint(self, record: TaskRecord, state: dict[str, Any]) -> None:
+        self.store.save(TaskRecord(record.task_id, record.task_type, "running", state, utc_now()))
 
     def _finish(self, record: TaskRecord, status: str, state: dict[str, Any]) -> TaskRecord:
         finished = TaskRecord(record.task_id, record.task_type, status, state, utc_now())

@@ -1,0 +1,4 @@
+{
+  "order-service": ["payment-service", "inventory-service"],
+  "payment-service": ["mysql"]
+}
