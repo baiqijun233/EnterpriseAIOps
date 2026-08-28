@@ -75,6 +75,8 @@ metrics = MetricsRegistry()
 class AIOpsRequestHandler(BaseHTTPRequestHandler):
     """将 HTTP 请求转换为编排器调用，保持无第三方依赖。"""
 
+    orchestrator = build_orchestrator()
+
     def do_GET(self) -> None:  # noqa: N802 - 标准库接口名称
         parsed = urlparse(self.path)
         if parsed.path == "/health":
@@ -88,7 +90,7 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             raw_limit = query.get("limit", ["50"])[0]
             try:
                 limit = int(raw_limit)
-                tasks = [record_to_dict(item) for item in self.server.orchestrator.store.list_recent(limit)]
+                tasks = [record_to_dict(item) for item in self.orchestrator.store.list_recent(limit)]
             except (TypeError, ValueError):
                 self._send_json({"error": "limit 必须是 1 到 200 的整数"}, HTTPStatus.BAD_REQUEST)
                 return
@@ -96,7 +98,7 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             return
         if parsed.path.startswith("/api/v1/tasks/"):
             task_id = parsed.path.rsplit("/", 1)[-1].strip()
-            record = self.server.orchestrator.store.get(task_id)
+            record = self.orchestrator.store.get(task_id)
             if record is None:
                 self._send_json({"error": "任务不存在"}, HTTPStatus.NOT_FOUND)
                 return
@@ -125,7 +127,7 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
                 baseline=[float(item) for item in payload.get("baseline", [])],
                 severity=str(payload.get("severity", "high")),
             )
-            record = self.server.orchestrator.handle(alert)
+            record = self.orchestrator.handle(alert)
             metrics.increment("aiops_incidents_created_total")
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
             self._send_json({"error": f"请求参数无效: {exc}"}, HTTPStatus.BAD_REQUEST)
@@ -142,7 +144,7 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict):
                 raise ValueError("请求体必须是 JSON 对象")
             approved = payload.get("approved")
-            record = self.server.orchestrator.resume_approval(task_id, approved)
+            record = self.orchestrator.resume_approval(task_id, approved)
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
             self._send_json({"error": f"审批参数无效: {exc}"}, HTTPStatus.BAD_REQUEST)
             return
@@ -170,25 +172,11 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
         return
 
 
-class AIOpsHTTPServer(ThreadingHTTPServer):
-    """为每个 HTTP 服务实例创建并负责释放独立编排器。"""
-
-    def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler]) -> None:
-        super().__init__(server_address, handler_class)
-        self.orchestrator = build_orchestrator()
-
-    def server_close(self) -> None:
-        try:
-            self.orchestrator.close()
-        finally:
-            super().server_close()
-
-
 def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPServer:
     # 允许 0 让操作系统分配临时端口，便于测试和多实例启动。
     if not host or not isinstance(port, int) or isinstance(port, bool) or not 0 <= port <= 65535:
         raise ValueError("host 或 port 无效")
-    return AIOpsHTTPServer((host, port), AIOpsRequestHandler)
+    return ThreadingHTTPServer((host, port), AIOpsRequestHandler)
 
 
 if __name__ == "__main__":
@@ -200,3 +188,4 @@ if __name__ == "__main__":
         pass
     finally:
         server.server_close()
+        AIOpsRequestHandler.orchestrator.close()
