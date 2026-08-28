@@ -11,7 +11,6 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from aiops_agent import AIOpsOrchestrator, Alert, load_topology
-from auth import AuthManager, AuthenticationError, AuthorizationError, AuthPrincipal
 from event_bus import create_event_bus
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient, OpenAICompatibleLLMClient
 from metrics import MetricsRegistry
@@ -88,8 +87,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             self._send_text(metrics.render(), "text/plain; version=0.0.4")
             return
         if parsed.path == "/api/v1/tasks":
-            if self._authorize("viewer") is None:
-                return
             query = parse_qs(parsed.query)
             raw_limit = query.get("limit", ["50"])[0]
             try:
@@ -101,8 +98,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             self._send_json({"tasks": tasks})
             return
         if parsed.path.startswith("/api/v1/tasks/"):
-            if self._authorize("viewer") is None:
-                return
             task_id = parsed.path.rsplit("/", 1)[-1].strip()
             record = self.server.orchestrator.store.get(task_id)
             if record is None:
@@ -114,15 +109,10 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802 - 标准库接口名称
         if self.path.startswith("/api/v1/tasks/") and self.path.endswith("/approval"):
-            principal = self._authorize("approver")
-            if principal is None:
-                return
-            self._handle_approval(principal)
+            self._handle_approval()
             return
         if self.path != "/api/v1/incidents":
             self._send_json({"error": "路径不存在"}, HTTPStatus.NOT_FOUND)
-            return
-        if self._authorize("operator") is None:
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -145,7 +135,7 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             return
         self._send_json(record_to_dict(record), HTTPStatus.CREATED)
 
-    def _handle_approval(self, principal: AuthPrincipal) -> None:
+    def _handle_approval(self) -> None:
         task_id = self.path.split("/api/v1/tasks/", 1)[1][:-len("/approval")].strip("/")
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -155,49 +145,18 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict):
                 raise ValueError("请求体必须是 JSON 对象")
             approved = payload.get("approved")
-            record = self.server.orchestrator.resume_approval(
-                task_id,
-                approved,
-                actor={
-                    "source": "api",
-                    "role": principal.role,
-                    "id": principal.key_id,
-                },
-            )
+            record = self.server.orchestrator.resume_approval(task_id, approved)
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
             self._send_json({"error": f"审批参数无效: {exc}"}, HTTPStatus.BAD_REQUEST)
             return
         self._send_json(record_to_dict(record))
 
-    def _authorize(self, required_role: str) -> AuthPrincipal | None:
-        try:
-            return self.server.auth_manager.authorize(
-                self.headers.get("X-API-Key"),
-                required_role,
-            )
-        except AuthenticationError as exc:
-            self._send_json(
-                {"error": str(exc)},
-                HTTPStatus.UNAUTHORIZED,
-                headers={"WWW-Authenticate": "ApiKey"},
-            )
-        except AuthorizationError as exc:
-            self._send_json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
-        return None
-
-    def _send_json(
-        self,
-        data: dict[str, Any],
-        status: HTTPStatus = HTTPStatus.OK,
-        headers: dict[str, str] | None = None,
-    ) -> None:
+    def _send_json(self, data: dict[str, Any], status: HTTPStatus = HTTPStatus.OK) -> None:
         metrics.increment("aiops_http_responses_total")
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        for header_name, header_value in (headers or {}).items():
-            self.send_header(header_name, header_value)
         self.end_headers()
         self.wfile.write(body)
 
@@ -217,18 +176,9 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
 class AIOpsHTTPServer(ThreadingHTTPServer):
     """为每个 HTTP 服务实例创建并负责释放独立编排器。"""
 
-    def __init__(
-        self,
-        server_address: tuple[str, int],
-        handler_class: type[BaseHTTPRequestHandler],
-        auth_manager: AuthManager | None = None,
-    ) -> None:
-        resolved_auth_manager = (
-            auth_manager if auth_manager is not None else AuthManager.from_environment()
-        )
+    def __init__(self, server_address: tuple[str, int], handler_class: type[BaseHTTPRequestHandler]) -> None:
         super().__init__(server_address, handler_class)
         self.orchestrator = build_orchestrator()
-        self.auth_manager = resolved_auth_manager
 
     def server_close(self) -> None:
         try:
@@ -237,15 +187,11 @@ class AIOpsHTTPServer(ThreadingHTTPServer):
             super().server_close()
 
 
-def create_server(
-    host: str = "127.0.0.1",
-    port: int = 8000,
-    auth_manager: AuthManager | None = None,
-) -> ThreadingHTTPServer:
+def create_server(host: str = "127.0.0.1", port: int = 8000) -> ThreadingHTTPServer:
     # 允许 0 让操作系统分配临时端口，便于测试和多实例启动。
     if not host or not isinstance(port, int) or isinstance(port, bool) or not 0 <= port <= 65535:
         raise ValueError("host 或 port 无效")
-    return AIOpsHTTPServer((host, port), AIOpsRequestHandler, auth_manager=auth_manager)
+    return AIOpsHTTPServer((host, port), AIOpsRequestHandler)
 
 
 if __name__ == "__main__":

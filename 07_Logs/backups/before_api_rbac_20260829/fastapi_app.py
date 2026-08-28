@@ -4,11 +4,10 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 
-def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None) -> Any:
+def create_app(orchestrator: Any | None = None) -> Any:
     try:
-        from fastapi import Depends, FastAPI, HTTPException
+        from fastapi import FastAPI, HTTPException
         from fastapi.responses import PlainTextResponse
-        from fastapi.security import APIKeyHeader
         from pydantic import BaseModel, Field
     except ImportError as exc:
         raise RuntimeError(
@@ -16,10 +15,6 @@ def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None)
         ) from exc
 
     owns_orchestrator = orchestrator is None
-    if auth_manager is None:
-        from auth import AuthManager
-
-        auth_manager = AuthManager.from_environment()
     if owns_orchestrator:
         from api_server import build_orchestrator
 
@@ -43,32 +38,14 @@ def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None)
 
     app = FastAPI(
         title="Enterprise Multi-Agent AIOps",
-        version="1.1.0",
+        version="1.0.0",
         description="企业级多 Agent 智能运维系统 API",
         lifespan=lifespan,
     )
-    app.state.auth_manager = auth_manager
 
-    from auth import AuthenticationError, AuthorizationError
     from metrics import MetricsRegistry
 
     metrics_registry = MetricsRegistry()
-    api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-    def require_role(required_role: str) -> Any:
-        def authorize(api_key: str | None = Depends(api_key_header)) -> Any:
-            try:
-                return auth_manager.authorize(api_key, required_role)
-            except AuthenticationError as exc:
-                raise HTTPException(
-                    status_code=401,
-                    detail=str(exc),
-                    headers={"WWW-Authenticate": "ApiKey"},
-                ) from exc
-            except AuthorizationError as exc:
-                raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-        return authorize
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -79,11 +56,7 @@ def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None)
         metrics_registry.increment("aiops_fastapi_requests_total")
         return metrics_registry.render()
 
-    @app.post(
-        "/api/v1/incidents",
-        status_code=201,
-        dependencies=[Depends(require_role("operator"))],
-    )
+    @app.post("/api/v1/incidents", status_code=201)
     def create_incident(request: IncidentRequest) -> dict[str, Any]:
         from aiops_agent import Alert
         from common.storage import record_to_dict
@@ -100,7 +73,7 @@ def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return record_to_dict(record)
 
-    @app.get("/api/v1/tasks", dependencies=[Depends(require_role("viewer"))])
+    @app.get("/api/v1/tasks")
     def list_tasks(limit: int = 50) -> dict[str, Any]:
         from common.storage import record_to_dict
 
@@ -110,10 +83,7 @@ def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"tasks": tasks}
 
-    @app.get(
-        "/api/v1/tasks/{task_id}",
-        dependencies=[Depends(require_role("viewer"))],
-    )
+    @app.get("/api/v1/tasks/{task_id}")
     def get_task(task_id: str) -> dict[str, Any]:
         from common.storage import record_to_dict
 
@@ -123,23 +93,11 @@ def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None)
         return record_to_dict(record)
 
     @app.post("/api/v1/tasks/{task_id}/approval")
-    def approve_task(
-        task_id: str,
-        request: ApprovalRequest,
-        principal: Any = Depends(require_role("approver")),
-    ) -> dict[str, Any]:
+    def approve_task(task_id: str, request: ApprovalRequest) -> dict[str, Any]:
         from common.storage import record_to_dict
 
         try:
-            record = orchestrator.resume_approval(
-                task_id.strip(),
-                request.approved,
-                actor={
-                    "source": "api",
-                    "role": principal.role,
-                    "id": principal.key_id,
-                },
-            )
+            record = orchestrator.resume_approval(task_id.strip(), request.approved)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return record_to_dict(record)

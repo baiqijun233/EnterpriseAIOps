@@ -45,25 +45,6 @@ Invoke-RestMethod http://127.0.0.1:8000/api/v1/tasks
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/tasks/<task_id>/approval -ContentType "application/json" -Body '{"approved":true}'
 ```
 
-API Key 认证默认关闭，便于仅本机访问的离线演示。公网或共享环境必须启用认证：
-
-```powershell
-$keyBytes = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($keyBytes)
-$apiKey = [Convert]::ToBase64String($keyBytes)
-$env:AIOPS_AUTH_ENABLED = "true"
-$env:AIOPS_API_KEYS = ConvertTo-Json @{$apiKey = "admin"} -Compress
-& ".\02_Source\agent_tech_portfolio\start_api.ps1"
-```
-
-调用受保护接口时通过 `X-API-Key` 请求头传递：
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/api/v1/tasks -Headers @{"X-API-Key" = $apiKey}
-```
-
-角色权限按等级继承：`viewer` 可查看任务，`operator` 可额外提交告警，`approver` 可额外人工审批，`admin` 拥有全部权限。`/health` 和 `/metrics` 保持公开，便于存活检查和 Prometheus 抓取。密钥至少 16 位，只从环境变量读取，不会写入日志和接口响应；审批审计只保留角色和不可逆的 12 位 Key 指纹。
-
 参考仓库保存在上级项目的 `02_Source\reference_multi_agent_aiops`，仅用于对照架构；项目仓库通过 `.gitignore` 忽略其内容，参考仓库自身保留独立 Git 历史。
 
 Kafka 模式（需要已运行的 Kafka broker）：

@@ -364,31 +364,10 @@ class AIOpsOrchestrator:
             state["error"] = str(exc)
             return self._finish(record, "failed", state)
 
-    def resume_approval(
-        self,
-        task_id: str,
-        approved: bool,
-        actor: dict[str, str] | None = None,
-    ) -> TaskRecord:
+    def resume_approval(self, task_id: str, approved: bool) -> TaskRecord:
         """恢复等待审批的任务，不重复执行前面的 Agent。"""
         if not task_id or not isinstance(approved, bool):
             raise ValueError("task_id 不能为空，approved 必须是布尔值")
-        actor_info = (
-            actor
-            if actor is not None
-            else {"source": "manual", "role": "manual", "id": "local"}
-        )
-        if not isinstance(actor_info, dict) or any(
-            not isinstance(actor_info.get(field), str)
-            or not actor_info[field].strip()
-            or len(actor_info[field]) > 64
-            for field in ("source", "role", "id")
-        ):
-            raise ValueError("actor 必须包含有效的 source、role 和 id")
-        safe_actor = {
-            field: actor_info[field].strip()
-            for field in ("source", "role", "id")
-        }
         with self._approval_lock:
             record = self.store.get(task_id)
             if record is None:
@@ -398,7 +377,7 @@ class AIOpsOrchestrator:
             state = record.state
             state.setdefault("events", []).append({
                 "stage": "approval_resume",
-                "result": {"approved": approved, "actor": safe_actor},
+                "result": {"approved": approved, "source": "manual"},
             })
             state.setdefault("result", {})["resolved"] = approved
             finished = TaskRecord(
