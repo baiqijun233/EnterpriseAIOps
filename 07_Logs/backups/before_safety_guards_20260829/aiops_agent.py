@@ -5,12 +5,10 @@ from __future__ import annotations
 import math
 import json
 import threading
-import time
 import uuid
-from collections import defaultdict, deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from event_bus import EventBus, InMemoryEventBus
 from llm_adapter import LLMClient
@@ -101,13 +99,7 @@ class RcaAgent:
             queue.extend(self._dependencies(current))
         related = sorted(visited)
         confidence = 0.72 if len(related) > 1 else 0.48
-        result = {
-            "service": service,
-            "root_cause": f"{service} 近期指标异常",
-            "confidence": confidence,
-            "impact_chain": related,
-            "evidence": alert,
-        }
+        result = {"root_cause": f"{service} 近期指标异常", "confidence": confidence, "impact_chain": related, "evidence": alert}
         if self.llm_client is not None:
             try:
                 result["explanation"] = self.llm_client.generate(
@@ -124,193 +116,18 @@ class RcaAgent:
         return list(self.topology.get(service, []))
 
 
-class SlidingWindowRateLimiter:
-    """按服务限制自动修复频率，避免异常风暴触发连续变更。"""
-
-    def __init__(
-        self,
-        max_actions: int = 5,
-        window_seconds: float = 60.0,
-        clock: Callable[[], float] | None = None,
-    ) -> None:
-        if not isinstance(max_actions, int) or isinstance(max_actions, bool) or max_actions < 1:
-            raise ValueError("max_actions 必须是正整数")
-        if not isinstance(window_seconds, (int, float)) or window_seconds <= 0:
-            raise ValueError("window_seconds 必须大于 0")
-        self.max_actions = max_actions
-        self.window_seconds = float(window_seconds)
-        self._clock = clock or time.monotonic
-        self._events: dict[str, deque[float]] = defaultdict(deque)
-        self._lock = threading.RLock()
-
-    def allow(self, service: str) -> bool:
-        if not service:
-            raise ValueError("service 不能为空")
-        now = self._clock()
-        cutoff = now - self.window_seconds
-        with self._lock:
-            events = self._events[service]
-            while events and events[0] <= cutoff:
-                events.popleft()
-            if len(events) >= self.max_actions:
-                return False
-            events.append(now)
-            return True
-
-
-class CircuitBreaker:
-    """按服务记录修复失败，超过阈值后暂停自动修复。"""
-
-    def __init__(
-        self,
-        failure_threshold: int = 3,
-        recovery_seconds: float = 60.0,
-        clock: Callable[[], float] | None = None,
-    ) -> None:
-        if not isinstance(failure_threshold, int) or isinstance(failure_threshold, bool) or failure_threshold < 1:
-            raise ValueError("failure_threshold 必须是正整数")
-        if not isinstance(recovery_seconds, (int, float)) or recovery_seconds <= 0:
-            raise ValueError("recovery_seconds 必须大于 0")
-        self.failure_threshold = failure_threshold
-        self.recovery_seconds = float(recovery_seconds)
-        self._clock = clock or time.monotonic
-        self._states: dict[str, dict[str, Any]] = {}
-        self._lock = threading.RLock()
-
-    def allow(self, service: str) -> bool:
-        if not service:
-            raise ValueError("service 不能为空")
-        with self._lock:
-            state = self._state_for(service)
-            if state["state"] == "closed":
-                return True
-            if state["state"] == "open":
-                opened_at = float(state["opened_at"])
-                if self._clock() - opened_at < self.recovery_seconds:
-                    return False
-                state["state"] = "half_open"
-                state["probe_in_flight"] = True
-                return True
-            return False
-
-    def record_failure(self, service: str) -> None:
-        if not service:
-            raise ValueError("service 不能为空")
-        with self._lock:
-            state = self._state_for(service)
-            state["failure_count"] += 1
-            if state["state"] == "half_open" or state["failure_count"] >= self.failure_threshold:
-                state.update({
-                    "state": "open",
-                    "opened_at": self._clock(),
-                    "probe_in_flight": False,
-                })
-
-    def record_success(self, service: str) -> None:
-        if not service:
-            raise ValueError("service 不能为空")
-        with self._lock:
-            self._states[service] = self._new_state()
-
-    def snapshot(self, service: str) -> dict[str, Any]:
-        if not service:
-            raise ValueError("service 不能为空")
-        with self._lock:
-            return dict(self._state_for(service))
-
-    def _state_for(self, service: str) -> dict[str, Any]:
-        return self._states.setdefault(service, self._new_state())
-
-    @staticmethod
-    def _new_state() -> dict[str, Any]:
-        return {
-            "state": "closed",
-            "failure_count": 0,
-            "opened_at": 0.0,
-            "probe_in_flight": False,
-        }
-
-
-class SafetyGuard:
-    """按限流、预演、爆炸半径、熔断顺序评估自动修复。"""
-
-    def __init__(
-        self,
-        rate_limiter: SlidingWindowRateLimiter | None = None,
-        circuit_breaker: CircuitBreaker | None = None,
-        max_blast_radius: float = 0.2,
-    ) -> None:
-        if not isinstance(max_blast_radius, (int, float)) or not 0 <= max_blast_radius <= 1:
-            raise ValueError("max_blast_radius 必须在 0 到 1 之间")
-        self.rate_limiter = rate_limiter or SlidingWindowRateLimiter()
-        self.circuit_breaker = circuit_breaker or CircuitBreaker()
-        self.max_blast_radius = float(max_blast_radius)
-
-    def evaluate(self, service: str, proposal: dict[str, Any]) -> dict[str, Any]:
-        if not service or not isinstance(proposal, dict):
-            raise ValueError("service 不能为空，proposal 必须是对象")
-        blast_radius = float(proposal.get("blast_radius", 1.0))
-        checks = {
-            "rate_limit": self.rate_limiter.allow(service),
-            "dry_run": proposal.get("dry_run") is True,
-            "blast_radius": 0 <= blast_radius <= self.max_blast_radius,
-            "circuit_breaker": None,
-        }
-        earlier_checks_passed = all(
-            checks[name] for name in ("rate_limit", "dry_run", "blast_radius")
-        )
-        if earlier_checks_passed:
-            checks["circuit_breaker"] = self.circuit_breaker.allow(service)
-        allowed = all(value is True for value in checks.values())
-        failed_check = next((name for name, value in checks.items() if value is False), None)
-        return {
-            "allowed": allowed,
-            "failed_check": failed_check,
-            "checks": checks,
-            "max_blast_radius": self.max_blast_radius,
-            "circuit_state": self.circuit_breaker.snapshot(service)["state"],
-        }
-
-    def record_failure(self, service: str) -> None:
-        self.circuit_breaker.record_failure(service)
-
-    def record_success(self, service: str) -> None:
-        self.circuit_breaker.record_success(service)
-
-
 class HealAgent:
-    def __init__(self, safety_guard: SafetyGuard | None = None, fleet_size: int = 20) -> None:
-        if not isinstance(fleet_size, int) or isinstance(fleet_size, bool) or fleet_size < 1:
-            raise ValueError("fleet_size 必须是正整数")
-        self.safety_guard = safety_guard or SafetyGuard()
-        self.fleet_size = fleet_size
-
     def propose(self, rca: dict[str, Any]) -> dict[str, Any]:
         confidence = float(rca.get("confidence", 0))
         action = "rollback" if confidence >= 0.7 else "restart"
-        proposal = {
-            "action": action,
-            "level": "L1" if confidence >= 0.7 else "L2",
-            "dry_run": True,
-            "blast_radius": min(1.0, len(rca.get("impact_chain", [])) / self.fleet_size),
-        }
-        service = str(rca.get("service") or "unknown-service")
-        proposal["safety_guard"] = self.safety_guard.evaluate(service, proposal)
-        return proposal
+        return {"action": action, "level": "L1" if confidence >= 0.7 else "L2", "dry_run": True, "blast_radius": min(1.0, len(rca.get("impact_chain", [])) / 10)}
 
 
 class ChangeAgent:
     def approve(self, proposal: dict[str, Any]) -> dict[str, Any]:
         risk = round(float(proposal.get("blast_radius", 1.0)) + (0.15 if proposal.get("action") == "rollback" else 0.25), 3)
-        guard_allowed = bool(proposal.get("safety_guard", {}).get("allowed", True))
-        approved = bool(proposal.get("dry_run")) and guard_allowed and risk < 0.8
-        return {
-            "approved": approved,
-            "risk": risk,
-            "guard_allowed": guard_allowed,
-            "auditor": "local-policy",
-            "audit_id": uuid.uuid4().hex,
-        }
+        approved = bool(proposal.get("dry_run")) and risk < 0.8
+        return {"approved": approved, "risk": risk, "auditor": "local-policy", "audit_id": uuid.uuid4().hex}
 
 
 class AIOpsOrchestrator:
@@ -321,7 +138,6 @@ class AIOpsOrchestrator:
         max_retries: int = 2,
         event_bus: EventBus | None = None,
         llm_client: LLMClient | None = None,
-        safety_guard: SafetyGuard | None = None,
     ) -> None:
         if not isinstance(max_retries, int) or isinstance(max_retries, bool) or not 0 <= max_retries <= 5:
             raise ValueError("max_retries 必须是 0 到 5 的整数")
@@ -331,7 +147,7 @@ class AIOpsOrchestrator:
             "order-service": ["payment-service", "inventory-service"],
             "payment-service": ["mysql"],
         }, llm_client=llm_client)
-        self.heal = HealAgent(safety_guard=safety_guard)
+        self.heal = HealAgent()
         self.change = ChangeAgent()
         self.max_retries = max_retries
         self.event_bus = event_bus or InMemoryEventBus()
@@ -380,16 +196,7 @@ class AIOpsOrchestrator:
                 "result": {"approved": approved, "source": "manual"},
             })
             state.setdefault("result", {})["resolved"] = approved
-            finished = TaskRecord(
-                record.task_id,
-                record.task_type,
-                "resolved" if approved else "rejected",
-                state,
-                utc_now(),
-            )
-            if not self.store.save_if_status(finished, "awaiting_approval"):
-                raise ValueError("任务已被其他实例处理或状态已变化")
-            return finished
+            return self._finish(record, "resolved" if approved else "rejected", state)
 
     def _run_stage(self, name: str, action: Any, state: dict[str, Any], record: TaskRecord) -> Any:
         """阶段级重试：失败记录原因，成功后保存检查点。"""

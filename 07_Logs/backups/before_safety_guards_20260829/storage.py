@@ -33,7 +33,6 @@ class TaskStore:
         self._closed = False
         self._connection = sqlite3.connect(self.database_path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA busy_timeout = 5000")
         self._connection.execute(
             """
             CREATE TABLE IF NOT EXISTS tasks (
@@ -73,29 +72,6 @@ class TaskStore:
         if row is None:
             return None
         return TaskRecord(row["task_id"], row["task_type"], row["status"], json.loads(row["state_json"]), row["updated_at"])
-
-    def save_if_status(self, record: TaskRecord, expected_status: str) -> bool:
-        """仅在数据库中状态仍符合预期时更新，保证多进程审批幂等。"""
-        if not record.task_id or not record.task_type or not record.status or not expected_status:
-            raise ValueError("task_id、task_type、status 和 expected_status 不能为空")
-        with self._lock:
-            cursor = self._connection.execute(
-                """
-                UPDATE tasks
-                SET task_type = ?, status = ?, state_json = ?, updated_at = ?
-                WHERE task_id = ? AND status = ?
-                """,
-                (
-                    record.task_type,
-                    record.status,
-                    json.dumps(record.state, ensure_ascii=False),
-                    record.updated_at,
-                    record.task_id,
-                    expected_status,
-                ),
-            )
-            self._connection.commit()
-            return cursor.rowcount == 1
 
     def list_recent(self, limit: int = 50) -> list[TaskRecord]:
         """按更新时间倒序返回最近任务，供接口查询使用。"""

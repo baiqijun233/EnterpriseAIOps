@@ -1,8 +1,8 @@
 # 企业级多 Agent 智能运维系统
 
-本项目展示异常检测投票、拓扑 BFS 根因分析、故障自愈建议、dry-run、限流、爆炸半径、熔断、风险审批和审计记录，并提供一个不依赖第三方库的本地 HTTP API 初版。
+本项目展示异常检测投票、拓扑 BFS 根因分析、故障自愈建议、dry-run、风险审批和审计记录，并提供一个不依赖第三方库的本地 HTTP API 初版。
 
-当前核心链路支持阶段级重试、SQLite 检查点保存、等待审批后恢复，以及从 `04_Data\topology.json` 加载服务拓扑。审批恢复使用 SQLite 条件更新，同一任务在多个 API 进程中也只能成功审批一次。API 重启后可继续查询已保存任务。
+当前核心链路支持阶段级重试、SQLite 检查点保存、等待审批后恢复，以及从 `04_Data\topology.json` 加载服务拓扑。API 重启后可继续查询已保存任务。
 
 默认只依赖 Python 标准库，便于离线演示。Kafka、Neo4j、Redis 和 Celery 都已提供可选适配层，未配置时仍可使用内存总线、JSON 拓扑和 SQLite。
 
@@ -107,7 +107,3 @@ python -m api_server
 可选的 `AIOPS_DEEPSEEK_ENDPOINT` 默认是 `https://api.deepseek.com/chat/completions`。密钥只从环境变量读取，不写入仓库、日志或接口响应。也可以继续使用 OpenAI 兼容服务：设置 `AIOPS_LLM=openai`、`AIOPS_LLM_ENDPOINT`、`AIOPS_LLM_API_KEY` 和 `AIOPS_LLM_MODEL`。
 
 Kafka 发送失败不会让主流程直接崩溃，错误会记录在任务的 `event_bus_errors` 字段，便于降级和排查。
-
-自动修复安全护栏按以下顺序执行：单服务滑动窗口限流 → dry-run 预演检查 → 爆炸半径检查 → 单服务熔断检查 → 变更审批。默认每个服务 60 秒最多 5 次自动修复建议，爆炸半径不超过 20%；被护栏拦截的任务会进入 `awaiting_approval`，不会被当成已执行修复。
-
-熔断器提供 `record_failure(service)` 和 `record_success(service)`，供真实修复执行器回写结果。当前项目只输出 dry-run 建议，不会伪造真实变更成功或失败。

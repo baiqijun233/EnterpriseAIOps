@@ -11,14 +11,7 @@ from pathlib import Path
 SOURCE = Path(__file__).resolve().parents[1] / "02_Source" / "agent_tech_portfolio"
 sys.path.insert(0, str(SOURCE))
 
-from aiops_agent import (
-    AIOpsOrchestrator,
-    Alert,
-    CircuitBreaker,
-    RcaAgent,
-    SafetyGuard,
-    SlidingWindowRateLimiter,
-)
+from aiops_agent import AIOpsOrchestrator, Alert, RcaAgent
 from api_server import create_server
 from common.storage import TaskStore
 from event_bus import InMemoryEventBus, KafkaEventBus
@@ -30,84 +23,6 @@ from metrics import MetricsRegistry
 
 
 class AIOpsAgentTests(unittest.TestCase):
-    def test_rate_limiter_recovers_after_window(self):
-        current_time = [100.0]
-        limiter = SlidingWindowRateLimiter(
-            max_actions=2,
-            window_seconds=10,
-            clock=lambda: current_time[0],
-        )
-        self.assertTrue(limiter.allow("order-service"))
-        self.assertTrue(limiter.allow("order-service"))
-        self.assertFalse(limiter.allow("order-service"))
-        current_time[0] = 111.0
-        self.assertTrue(limiter.allow("order-service"))
-
-    def test_circuit_breaker_opens_and_allows_one_half_open_probe(self):
-        current_time = [100.0]
-        breaker = CircuitBreaker(
-            failure_threshold=2,
-            recovery_seconds=10,
-            clock=lambda: current_time[0],
-        )
-        breaker.record_failure("order-service")
-        breaker.record_failure("order-service")
-        self.assertEqual(breaker.snapshot("order-service")["state"], "open")
-        self.assertFalse(breaker.allow("order-service"))
-        current_time[0] = 111.0
-        self.assertTrue(breaker.allow("order-service"))
-        self.assertFalse(breaker.allow("order-service"))
-        breaker.record_success("order-service")
-        self.assertTrue(breaker.allow("order-service"))
-
-    def test_pipeline_records_complete_safety_guard_chain(self):
-        result = AIOpsOrchestrator().handle(
-            Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40])
-        )
-        heal_event = next(event for event in result.state["events"] if event["stage"] == "heal")
-        guard = heal_event["result"]["safety_guard"]
-        self.assertEqual(result.status, "resolved")
-        self.assertTrue(guard["allowed"])
-        self.assertEqual(
-            list(guard["checks"]),
-            ["rate_limit", "dry_run", "blast_radius", "circuit_breaker"],
-        )
-
-    def test_open_circuit_breaker_requires_manual_approval(self):
-        guard = SafetyGuard(circuit_breaker=CircuitBreaker(failure_threshold=1))
-        guard.record_failure("order-service")
-        orchestrator = AIOpsOrchestrator(safety_guard=guard)
-        result = orchestrator.handle(
-            Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40])
-        )
-        heal_event = next(event for event in result.state["events"] if event["stage"] == "heal")
-        self.assertEqual(result.status, "awaiting_approval")
-        self.assertEqual(
-            heal_event["result"]["safety_guard"]["failed_check"],
-            "circuit_breaker",
-        )
-        orchestrator.close()
-
-    def test_rate_limit_requires_manual_approval_after_threshold(self):
-        guard = SafetyGuard(
-            rate_limiter=SlidingWindowRateLimiter(max_actions=1, window_seconds=60)
-        )
-        orchestrator = AIOpsOrchestrator(safety_guard=guard)
-        first = orchestrator.handle(
-            Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40])
-        )
-        second = orchestrator.handle(
-            Alert("order-service", "cpu", 96.0, [40, 41, 39, 42, 40])
-        )
-        heal_event = next(event for event in second.state["events"] if event["stage"] == "heal")
-        self.assertEqual(first.status, "resolved")
-        self.assertEqual(second.status, "awaiting_approval")
-        self.assertEqual(
-            heal_event["result"]["safety_guard"]["failed_check"],
-            "rate_limit",
-        )
-        orchestrator.close()
-
     def test_anomaly_pipeline_records_audit(self):
         result = AIOpsOrchestrator().handle(Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40]))
         self.assertIn(result.status, {"resolved", "awaiting_approval"})
@@ -195,43 +110,6 @@ class AIOpsAgentTests(unittest.TestCase):
             finally:
                 first.store.close()
                 second.store.close()
-
-    def test_approval_resume_is_single_use_across_two_stores(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            database_path = Path(temp_dir) / "tasks.sqlite3"
-            first = AIOpsOrchestrator(store=TaskStore(database_path))
-            second = AIOpsOrchestrator(store=TaskStore(database_path))
-            first.change.approve = lambda proposal: {
-                "approved": False,
-                "risk": 0.9,
-                "audit_id": "test-audit",
-            }
-            try:
-                pending = first.handle(
-                    Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40])
-                )
-                results = []
-
-                def resume(orchestrator):
-                    try:
-                        results.append(
-                            orchestrator.resume_approval(pending.task_id, True).status
-                        )
-                    except ValueError as exc:
-                        results.append(type(exc).__name__)
-
-                threads = [Thread(target=resume, args=(item,)) for item in (first, second)]
-                for thread in threads:
-                    thread.start()
-                for thread in threads:
-                    thread.join(timeout=2)
-
-                self.assertEqual(results.count("resolved"), 1)
-                self.assertEqual(results.count("ValueError"), 1)
-                self.assertEqual(first.store.get(pending.task_id).status, "resolved")
-            finally:
-                first.close()
-                second.close()
 
     def test_orchestrator_publishes_stage_events(self):
         event_bus = InMemoryEventBus()
