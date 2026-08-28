@@ -118,8 +118,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
             if length <= 0 or length > 1024 * 1024:
                 raise ValueError("请求体大小无效")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            if not isinstance(payload, dict):
-                raise ValueError("请求体必须是 JSON 对象")
             alert = Alert(
                 service=str(payload.get("service", "")).strip(),
                 metric=str(payload.get("metric", "")).strip(),
@@ -138,11 +136,7 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
         task_id = self.path.split("/api/v1/tasks/", 1)[1][:-len("/approval")].strip("/")
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if length <= 0 or length > 1024 * 1024:
-                raise ValueError("请求体大小无效")
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
-            if not isinstance(payload, dict):
-                raise ValueError("请求体必须是 JSON 对象")
             approved = payload.get("approved")
             record = self.orchestrator.resume_approval(task_id, approved)
         except (TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:

@@ -97,3 +97,14 @@
 - 使用 `AIOPS_LLM=deepseek` 调用 DeepSeek `deepseek-chat`，完整处理一条高 CPU 告警。
 - 验证结果：任务状态 `resolved`，阶段依次为 `monitor`、`rca`、`heal`、`change`；RCA 已生成 DeepSeek 解释，未出现 `llm_error`。
 - 测试结束后已清除当前 PowerShell 进程中的密钥环境变量；密钥文件未复制、未改动。
+
+## 2026-08-28 - 独立运行自查与修复
+
+- 发现并修复标准库 API 对 JSON 数组请求可能返回 500 的问题；补充 400 边界测试。
+- 发现并修复 FastAPI 指标每次重置、应用资源未统一释放的问题；改为应用级指标和生命周期关闭。
+- 审批恢复增加同一进程内并发锁，重复审批只允许一次成功。
+- Celery 新增真实 `aiops.handle_incident` 任务，复用正式 API 的 SQLite、拓扑、事件总线和 LLM 配置。
+- 新增 `.env.example`、`verify.ps1`、`start_worker.ps1` 和项目级 `05_Docs\运行手册.md`，降低对人工讲解和当前工作目录的依赖。
+- 真实验证：从任意工作目录启动 Worker，完整异步任务返回 `resolved`，事件阶段为 `monitor,rca,heal,change`。
+- 自查后自动化测试共 22 项全部通过，编译检查、差异检查和一键验证脚本均通过。
+- 已知生产边界：缺少认证/授权/限流；审批锁尚未覆盖多进程；健康检查暂为存活检查；真实 LLM、Kafka、Neo4j 的可用性需要单独探针和告警。

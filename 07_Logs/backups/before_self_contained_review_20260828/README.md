@@ -71,23 +71,12 @@ Neo4j 拓扑模式：设置 `AIOPS_TOPOLOGY=neo4j`，并配置 `AIOPS_NEO4J_URI`
 Redis/Celery 适配器位于 `adapters\task_queue.py`，用于异步任务入队和分发；需要独立启动 Celery Worker 才会实际消费任务。项目提供 `celery_app.py` 的 `aiops.echo` 示例任务，可按下面命令启动 Worker：
 
 ```powershell
+$env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 $env:AIOPS_CELERY_BROKER = "redis://localhost:6379/0"
-& "E:\Agent\AIProjects\Project024_EnterpriseAIOps\02_Source\agent_tech_portfolio\start_worker.ps1"
+celery -A celery_app:celery_app worker --pool=solo --concurrency=1 --loglevel=INFO
 ```
-
-也可以在源码目录手动执行 `celery -A celery_app:celery_app worker --pool=solo --concurrency=1 --loglevel=INFO`；脚本会自动设置绝对源码路径，因此不依赖当前工作目录。
 
 Windows 本地验证建议使用 `--pool=solo`；停止 Worker 在终端按 `Ctrl+C` 即可。Worker 只消费已注册任务，未知任务会被记录为失败，不会自动执行任意代码。
-
-提交一条真实 AIOps 异步任务（需要 Worker 正在运行）：
-
-```powershell
-$sourceDir = "E:\Agent\AIProjects\Project024_EnterpriseAIOps\02_Source\agent_tech_portfolio"
-$env:PYTHONPATH = $sourceDir
-python -c "from celery_app import celery_app; r=celery_app.send_task('aiops.handle_incident', kwargs={'service':'order-service','metric':'cpu','value':95,'baseline':[40,41,39,42,40]}); print(r.get(timeout=30))"
-```
-
-该任务会复用正式 API 的 SQLite、拓扑、事件总线和 LLM 环境变量配置。
 
 LLM 模式：默认关闭。设置 `AIOPS_LLM=deterministic` 可离线生成解释。
 

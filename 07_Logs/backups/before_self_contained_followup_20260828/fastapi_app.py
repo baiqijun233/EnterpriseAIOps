@@ -1,6 +1,5 @@
 """FastAPI 正式入口，依赖按需加载，默认离线 HTTP 服务不受影响。"""
 
-from contextlib import asynccontextmanager
 from typing import Any
 
 
@@ -30,22 +29,20 @@ def create_app(orchestrator: Any | None = None) -> Any:
     class ApprovalRequest(BaseModel):
         approved: bool
 
-    @asynccontextmanager
-    async def lifespan(app: Any):
-        yield
-        if owns_orchestrator and hasattr(orchestrator, "close"):
-            orchestrator.close()
-
     app = FastAPI(
         title="Enterprise Multi-Agent AIOps",
         version="1.0.0",
         description="企业级多 Agent 智能运维系统 API",
-        lifespan=lifespan,
     )
 
     from metrics import MetricsRegistry
 
     metrics_registry = MetricsRegistry()
+
+    @app.on_event("shutdown")
+    def shutdown() -> None:
+        if owns_orchestrator and hasattr(orchestrator, "close"):
+            orchestrator.close()
 
     @app.get("/health")
     def health() -> dict[str, str]:

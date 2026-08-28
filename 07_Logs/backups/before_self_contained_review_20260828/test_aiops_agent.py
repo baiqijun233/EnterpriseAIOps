@@ -74,29 +74,6 @@ class AIOpsAgentTests(unittest.TestCase):
         self.assertEqual(calls["count"], 1)
         self.assertEqual(resumed.state["events"][-1]["stage"], "approval_resume")
 
-    def test_approval_resume_is_single_use_under_concurrency(self):
-        orchestrator = AIOpsOrchestrator()
-        orchestrator.change.approve = lambda proposal: {
-            "approved": False, "risk": 0.9, "audit_id": "test-audit"
-        }
-        pending = orchestrator.handle(Alert("order-service", "cpu", 95.0, [40, 41, 39, 42, 40]))
-        results = []
-
-        def resume() -> None:
-            try:
-                results.append(orchestrator.resume_approval(pending.task_id, True).status)
-            except ValueError as exc:
-                results.append(type(exc).__name__)
-
-        threads = [Thread(target=resume) for _ in range(2)]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=2)
-        self.assertEqual(results.count("resolved"), 1)
-        self.assertEqual(results.count("ValueError"), 1)
-        orchestrator.close()
-
     def test_sqlite_task_can_be_read_by_new_orchestrator(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "tasks.sqlite3"
@@ -257,19 +234,6 @@ class AIOpsAgentTests(unittest.TestCase):
         self.assertIn("aiops_fastapi_requests_total", metrics_response.text)
         orchestrator.close()
 
-    def test_fastapi_metrics_accumulate_for_one_app(self):
-        try:
-            from fastapi.testclient import TestClient
-        except ImportError:
-            self.skipTest("FastAPI 测试依赖未安装")
-        orchestrator = AIOpsOrchestrator()
-        client = TestClient(create_app(orchestrator))
-        first = client.get("/metrics")
-        second = client.get("/metrics")
-        self.assertEqual(first.status_code, 200)
-        self.assertIn("aiops_fastapi_requests_total 2", second.text)
-        orchestrator.close()
-
     def test_rca_can_use_neo4j_style_topology_provider(self):
         class Provider:
             def get_dependencies(self, service):
@@ -409,39 +373,6 @@ class AIOpsAgentTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=2)
-
-    def test_http_api_rejects_json_array_body(self):
-        server = create_server(port=0)
-        thread = Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            request = Request(
-                f"http://127.0.0.1:{server.server_port}/api/v1/incidents",
-                data=b"[]",
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with self.assertRaises(HTTPError) as error:
-                urlopen(request)
-            self.assertEqual(error.exception.code, 400)
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join(timeout=2)
-
-    def test_celery_incident_task_runs_core_workflow(self):
-        try:
-            from celery_app import celery_app
-        except (ImportError, RuntimeError):
-            self.skipTest("Celery 依赖未安装")
-        result = celery_app.tasks["aiops.handle_incident"].run(
-            service="order-service",
-            metric="cpu",
-            value=95,
-            baseline=[40, 41, 39, 42, 40],
-        )
-        self.assertEqual(result["status"], "resolved")
-        self.assertEqual(result["task_type"], "aiops")
 
 
 if __name__ == "__main__":

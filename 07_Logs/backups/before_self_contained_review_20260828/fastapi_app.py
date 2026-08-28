@@ -1,6 +1,5 @@
 """FastAPI 正式入口，依赖按需加载，默认离线 HTTP 服务不受影响。"""
 
-from contextlib import asynccontextmanager
 from typing import Any
 
 
@@ -14,8 +13,7 @@ def create_app(orchestrator: Any | None = None) -> Any:
             "FastAPI 模式需要安装依赖：python -m pip install -r requirements-fastapi.txt"
         ) from exc
 
-    owns_orchestrator = orchestrator is None
-    if owns_orchestrator:
+    if orchestrator is None:
         from api_server import build_orchestrator
 
         orchestrator = build_orchestrator()
@@ -30,22 +28,11 @@ def create_app(orchestrator: Any | None = None) -> Any:
     class ApprovalRequest(BaseModel):
         approved: bool
 
-    @asynccontextmanager
-    async def lifespan(app: Any):
-        yield
-        if owns_orchestrator and hasattr(orchestrator, "close"):
-            orchestrator.close()
-
     app = FastAPI(
         title="Enterprise Multi-Agent AIOps",
         version="1.0.0",
         description="企业级多 Agent 智能运维系统 API",
-        lifespan=lifespan,
     )
-
-    from metrics import MetricsRegistry
-
-    metrics_registry = MetricsRegistry()
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -53,8 +40,11 @@ def create_app(orchestrator: Any | None = None) -> Any:
 
     @app.get("/metrics", response_class=PlainTextResponse)
     def metrics() -> str:
-        metrics_registry.increment("aiops_fastapi_requests_total")
-        return metrics_registry.render()
+        from metrics import MetricsRegistry
+
+        registry = MetricsRegistry()
+        registry.increment("aiops_fastapi_requests_total")
+        return registry.render()
 
     @app.post("/api/v1/incidents", status_code=201)
     def create_incident(request: IncidentRequest) -> dict[str, Any]:

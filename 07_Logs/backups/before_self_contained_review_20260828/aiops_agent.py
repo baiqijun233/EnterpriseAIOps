@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import json
-import threading
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -151,7 +150,6 @@ class AIOpsOrchestrator:
         self.change = ChangeAgent()
         self.max_retries = max_retries
         self.event_bus = event_bus or InMemoryEventBus()
-        self._approval_lock = threading.RLock()
 
     def handle(self, alert: Alert) -> TaskRecord:
         self._validate_alert(alert)
@@ -184,19 +182,18 @@ class AIOpsOrchestrator:
         """恢复等待审批的任务，不重复执行前面的 Agent。"""
         if not task_id or not isinstance(approved, bool):
             raise ValueError("task_id 不能为空，approved 必须是布尔值")
-        with self._approval_lock:
-            record = self.store.get(task_id)
-            if record is None:
-                raise ValueError("任务不存在")
-            if record.status != "awaiting_approval":
-                raise ValueError("任务当前不在等待审批状态")
-            state = record.state
-            state.setdefault("events", []).append({
-                "stage": "approval_resume",
-                "result": {"approved": approved, "source": "manual"},
-            })
-            state.setdefault("result", {})["resolved"] = approved
-            return self._finish(record, "resolved" if approved else "rejected", state)
+        record = self.store.get(task_id)
+        if record is None:
+            raise ValueError("任务不存在")
+        if record.status != "awaiting_approval":
+            raise ValueError("任务当前不在等待审批状态")
+        state = record.state
+        state.setdefault("events", []).append({
+            "stage": "approval_resume",
+            "result": {"approved": approved, "source": "manual"},
+        })
+        state.setdefault("result", {})["resolved"] = approved
+        return self._finish(record, "resolved" if approved else "rejected", state)
 
     def _run_stage(self, name: str, action: Any, state: dict[str, Any], record: TaskRecord) -> Any:
         """阶段级重试：失败记录原因，成功后保存检查点。"""

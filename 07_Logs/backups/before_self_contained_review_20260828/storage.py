@@ -30,7 +30,6 @@ class TaskStore:
     def __init__(self, database_path: str | Path = ":memory:") -> None:
         self.database_path = str(database_path)
         self._lock = threading.RLock()
-        self._closed = False
         self._connection = sqlite3.connect(self.database_path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute(
@@ -95,9 +94,7 @@ class TaskStore:
 
     def close(self) -> None:
         with self._lock:
-            if not self._closed:
-                self._connection.close()
-                self._closed = True
+            self._connection.close()
 
 
 def record_to_dict(record: TaskRecord) -> dict[str, Any]:
