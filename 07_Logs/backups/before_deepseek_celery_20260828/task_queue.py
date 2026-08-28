@@ -66,8 +66,8 @@ class RedisTaskQueue:
 
 class CeleryTaskDispatcher:
     def __init__(self, broker_url: str, app_factory: Callable[..., Any] | None = None) -> None:
-        if not isinstance(broker_url, str) or not broker_url.startswith(("redis://", "rediss://", "amqp://")):
-            raise ValueError("broker_url 必须是 redis://、rediss:// 或 amqp:// 地址")
+        if not isinstance(broker_url, str) or not broker_url.startswith(("redis://", "amqp://")):
+            raise ValueError("broker_url 必须是 redis:// 或 amqp:// 地址")
         self.broker_url = broker_url
         self._app_factory = app_factory
         self._app: Any | None = None

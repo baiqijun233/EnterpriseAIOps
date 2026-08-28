@@ -76,19 +76,3 @@ class OpenAICompatibleLLMClient:
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("LLM 返回内容为空")
         return content.strip()
-
-
-class DeepSeekLLMClient(OpenAICompatibleLLMClient):
-    """DeepSeek 官方 API 客户端，使用 OpenAI 兼容协议。"""
-
-    DEFAULT_ENDPOINT = "https://api.deepseek.com/chat/completions"
-    DEFAULT_MODEL = "deepseek-chat"
-
-    def __init__(
-        self,
-        api_key: str,
-        model: str = DEFAULT_MODEL,
-        endpoint: str = DEFAULT_ENDPOINT,
-        timeout: float = 30.0,
-    ) -> None:
-        super().__init__(endpoint=endpoint, api_key=api_key, model=model, timeout=timeout)

@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlparse
 
 from aiops_agent import AIOpsOrchestrator, Alert, load_topology
 from event_bus import create_event_bus
-from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient, OpenAICompatibleLLMClient
+from llm_adapter import DeterministicLLMClient, OpenAICompatibleLLMClient
 from metrics import MetricsRegistry
 from common.storage import TaskStore, record_to_dict
 from adapters.neo4j_topology import Neo4jTopologyProvider
@@ -45,12 +45,6 @@ def build_orchestrator() -> AIOpsOrchestrator:
     llm_mode = os.getenv("AIOPS_LLM", "none").strip().lower()
     if llm_mode == "deterministic":
         llm_client = DeterministicLLMClient()
-    elif llm_mode == "deepseek":
-        llm_client = DeepSeekLLMClient(
-            api_key=os.getenv("AIOPS_DEEPSEEK_API_KEY", ""),
-            endpoint=os.getenv("AIOPS_DEEPSEEK_ENDPOINT", DeepSeekLLMClient.DEFAULT_ENDPOINT),
-            model=os.getenv("AIOPS_DEEPSEEK_MODEL", DeepSeekLLMClient.DEFAULT_MODEL),
-        )
     elif llm_mode == "openai":
         llm_client = OpenAICompatibleLLMClient(
             endpoint=os.getenv("AIOPS_LLM_ENDPOINT", ""),
@@ -60,7 +54,7 @@ def build_orchestrator() -> AIOpsOrchestrator:
     elif llm_mode == "none":
         llm_client = None
     else:
-        raise ValueError("AIOPS_LLM 只能是 none、deterministic、deepseek 或 openai")
+        raise ValueError("AIOPS_LLM 只能是 none、deterministic 或 openai")
     return AIOpsOrchestrator(
         store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
         topology=topology,

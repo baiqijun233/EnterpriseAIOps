@@ -2,6 +2,7 @@ import sys
 import unittest
 import json
 import tempfile
+from unittest.mock import patch
 from threading import Thread
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -15,7 +16,7 @@ from api_server import create_server
 from common.storage import TaskStore
 from event_bus import InMemoryEventBus, KafkaEventBus
 from fastapi_app import create_app
-from llm_adapter import DeterministicLLMClient
+from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient
 from adapters.neo4j_topology import Neo4jTopologyProvider
 from adapters.task_queue import CeleryTaskDispatcher, RedisTaskQueue
 from metrics import MetricsRegistry
@@ -178,6 +179,38 @@ class AIOpsAgentTests(unittest.TestCase):
         ).analyze("order-service", {"metric": "cpu"})
         self.assertIn("explanation", result)
         self.assertNotIn("llm_error", result)
+
+    def test_deepseek_client_uses_openai_compatible_request(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps({
+                    "choices": [{"message": {"content": "已完成根因解释"}}]
+                }).encode("utf-8")
+
+        captured = {}
+
+        def fake_urlopen(request, timeout):
+            captured["url"] = request.full_url
+            captured["headers"] = dict(request.headers)
+            captured["body"] = json.loads(request.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        with patch("llm_adapter.urlopen", fake_urlopen):
+            client = DeepSeekLLMClient("sk-test", model="deepseek-chat")
+            content = client.generate("分析故障", {"service": "order-service"})
+
+        self.assertEqual(content, "已完成根因解释")
+        self.assertEqual(captured["url"], "https://api.deepseek.com/chat/completions")
+        self.assertEqual(captured["headers"]["Authorization"], "Bearer sk-test")
+        self.assertEqual(captured["body"]["model"], "deepseek-chat")
+        self.assertIn("结构化上下文", captured["body"]["messages"][0]["content"])
 
     def test_fastapi_entry_runs_real_routes(self):
         try:

@@ -82,3 +82,11 @@
 - `git diff --check` 和工作区状态检查：通过，无未提交改动。
 - `docker compose -f 02_Source/agent_tech_portfolio/docker-compose.production.yml config --quiet`：通过。
 - 当前 Kafka、Neo4j、Redis 容器均处于运行状态；Celery worker 和真实 OpenAI 兼容接口仍为按需验证项，不影响离线主流程交付。
+
+## 2026-08-28 - DeepSeek 接入与 Celery 实际验证
+
+- 新增 `DeepSeekLLMClient`，支持 `AIOPS_LLM=deepseek`；密钥从 `AIOPS_DEEPSEEK_API_KEY` 读取，默认使用 `https://api.deepseek.com/chat/completions` 和 `deepseek-chat`，不写入代码或日志。
+- 新增 `celery_app.py` 与 `aiops.echo` 示例任务，兼容 `CeleryTaskDispatcher` 的展开参数调用方式。
+- 先发现并修复 Worker 参数不兼容问题，再用本机 Redis 真实启动 `solo` Worker；任务返回 `status=processed`，结果回传成功。
+- 关机后重新启动并保持共享 Redis 容器运行；已停止本项目 `agent_tech_portfolio-kafka-1` 和 `agent_tech_portfolio-neo4j-1` 容器，未删除数据卷，也未停止其他项目 Redis。
+- 新增 DeepSeek 请求结构自动化测试；本轮自动化测试共 18 项，全部通过。

@@ -68,28 +68,8 @@ Prometheus 可抓取 `GET /metrics`，无需额外修改核心流程。
 
 Neo4j 拓扑模式：设置 `AIOPS_TOPOLOGY=neo4j`，并配置 `AIOPS_NEO4J_URI`、`AIOPS_NEO4J_USER`、`AIOPS_NEO4J_PASSWORD`；RCA 会直接查询服务依赖关系。
 
-Redis/Celery 适配器位于 `adapters\task_queue.py`，用于异步任务入队和分发；需要独立启动 Celery Worker 才会实际消费任务。项目提供 `celery_app.py` 的 `aiops.echo` 示例任务，可按下面命令启动 Worker：
+Redis/Celery 适配器位于 `adapters\task_queue.py`，用于异步任务入队和分发；需要独立启动 Celery worker 才会实际消费任务。
 
-```powershell
-$env:PYTHONPATH = "02_Source\agent_tech_portfolio"
-$env:AIOPS_CELERY_BROKER = "redis://localhost:6379/0"
-celery -A celery_app:celery_app worker --pool=solo --concurrency=1 --loglevel=INFO
-```
-
-Windows 本地验证建议使用 `--pool=solo`；停止 Worker 在终端按 `Ctrl+C` 即可。Worker 只消费已注册任务，未知任务会被记录为失败，不会自动执行任意代码。
-
-LLM 模式：默认关闭。设置 `AIOPS_LLM=deterministic` 可离线生成解释。
-
-接入 DeepSeek 官方 API 时，在 PowerShell 中配置以下环境变量后启动服务：
-
-```powershell
-$env:AIOPS_LLM = "deepseek"
-$env:AIOPS_DEEPSEEK_API_KEY = "你的 DeepSeek API Key"
-$env:AIOPS_DEEPSEEK_MODEL = "deepseek-chat"
-$env:PYTHONPATH = "02_Source\agent_tech_portfolio"
-python -m api_server
-```
-
-可选的 `AIOPS_DEEPSEEK_ENDPOINT` 默认是 `https://api.deepseek.com/chat/completions`。密钥只从环境变量读取，不写入仓库、日志或接口响应。也可以继续使用 OpenAI 兼容服务：设置 `AIOPS_LLM=openai`、`AIOPS_LLM_ENDPOINT`、`AIOPS_LLM_API_KEY` 和 `AIOPS_LLM_MODEL`。
+LLM 模式：默认关闭。设置 `AIOPS_LLM=deterministic` 可离线生成解释；接入 OpenAI 兼容服务时设置 `AIOPS_LLM=openai`、`AIOPS_LLM_ENDPOINT`、`AIOPS_LLM_API_KEY` 和 `AIOPS_LLM_MODEL`。密钥只从环境变量读取，不写入仓库。
 
 Kafka 发送失败不会让主流程直接崩溃，错误会记录在任务的 `event_bus_errors` 字段，便于降级和排查。
