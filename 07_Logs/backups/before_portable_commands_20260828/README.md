@@ -6,8 +6,6 @@
 
 默认只依赖 Python 标准库，便于离线演示。Kafka、Neo4j、Redis 和 Celery 都已提供可选适配层，未配置时仍可使用内存总线、JSON 拓扑和 SQLite。
 
-项目附带 `.env.example` 作为变量清单，但程序不会自动加载 `.env` 文件；请按下方 PowerShell 命令设置环境变量。
-
 运行测试：
 
 ```powershell
@@ -24,14 +22,15 @@ python -c "from aiops_agent import AIOpsOrchestrator, Alert; print(AIOpsOrchestr
 启动标准库 HTTP API：
 
 ```powershell
-& ".\02_Source\agent_tech_portfolio\start_api.ps1"
+$env:PYTHONPATH = "02_Source\agent_tech_portfolio"
+python -m api_server
 ```
 
 启动 FastAPI API（可选）：
 
 ```powershell
 python -m pip install -r 02_Source\agent_tech_portfolio\requirements-fastapi.txt
-$env:PYTHONPATH = (Resolve-Path .\02_Source\agent_tech_portfolio).Path
+$env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 python -m fastapi_app
 ```
 
@@ -98,7 +97,7 @@ LLM 模式：默认关闭。设置 `AIOPS_LLM=deterministic` 可离线生成解�
 $env:AIOPS_LLM = "deepseek"
 $env:AIOPS_DEEPSEEK_API_KEY = "你的 DeepSeek API Key"
 $env:AIOPS_DEEPSEEK_MODEL = "deepseek-chat"
-$env:PYTHONPATH = (Resolve-Path .\02_Source\agent_tech_portfolio).Path
+$env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 python -m api_server
 ```
 
