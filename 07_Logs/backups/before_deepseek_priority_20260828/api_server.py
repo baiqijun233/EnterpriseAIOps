@@ -42,10 +42,7 @@ def build_orchestrator() -> AIOpsOrchestrator:
         use_kafka=bus_mode == "kafka",
         bootstrap_servers=os.getenv("AIOPS_KAFKA_BOOTSTRAP", "localhost:9092"),
     )
-    llm_mode = os.getenv("AIOPS_LLM", "auto").strip().lower()
-    if llm_mode == "auto":
-        # 有 DeepSeek 密钥时优先使用；没有密钥时保持离线可运行。
-        llm_mode = "deepseek" if os.getenv("AIOPS_DEEPSEEK_API_KEY", "").strip() else "none"
+    llm_mode = os.getenv("AIOPS_LLM", "none").strip().lower()
     if llm_mode == "deterministic":
         llm_client = DeterministicLLMClient()
     elif llm_mode == "deepseek":
@@ -63,7 +60,7 @@ def build_orchestrator() -> AIOpsOrchestrator:
     elif llm_mode == "none":
         llm_client = None
     else:
-        raise ValueError("AIOPS_LLM 只能是 auto、none、deterministic、deepseek 或 openai")
+        raise ValueError("AIOPS_LLM 只能是 none、deterministic、deepseek 或 openai")
     return AIOpsOrchestrator(
         store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
         topology=topology,

@@ -90,7 +90,7 @@ python -c "from celery_app import celery_app; r=celery_app.send_task('aiops.hand
 
 该任务会复用正式 API 的 SQLite、拓扑、事件总线和 LLM 环境变量配置。
 
-LLM 模式默认是 `auto`：检测到 `AIOPS_DEEPSEEK_API_KEY` 时优先使用 DeepSeek，没有密钥则自动回退到无 LLM 离线模式。也可以显式设置 `AIOPS_LLM=deterministic` 生成离线解释，或设置 `AIOPS_LLM=none` 完全关闭 LLM。
+LLM 模式：默认关闭。设置 `AIOPS_LLM=deterministic` 可离线生成解释。
 
 接入 DeepSeek 官方 API 时，在 PowerShell 中配置以下环境变量后启动服务：
 
@@ -101,8 +101,6 @@ $env:AIOPS_DEEPSEEK_MODEL = "deepseek-chat"
 $env:PYTHONPATH = (Resolve-Path .\02_Source\agent_tech_portfolio).Path
 python -m api_server
 ```
-
-如果不设置 `AIOPS_LLM`，只要存在 `AIOPS_DEEPSEEK_API_KEY`，企业 API 会自动优先使用 DeepSeek。
 
 可选的 `AIOPS_DEEPSEEK_ENDPOINT` 默认是 `https://api.deepseek.com/chat/completions`。密钥只从环境变量读取，不写入仓库、日志或接口响应。也可以继续使用 OpenAI 兼容服务：设置 `AIOPS_LLM=openai`、`AIOPS_LLM_ENDPOINT`、`AIOPS_LLM_API_KEY` 和 `AIOPS_LLM_MODEL`。
 

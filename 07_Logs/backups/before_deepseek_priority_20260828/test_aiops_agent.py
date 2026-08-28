@@ -235,50 +235,6 @@ class AIOpsAgentTests(unittest.TestCase):
         self.assertEqual(captured["body"]["model"], "deepseek-chat")
         self.assertIn("结构化上下文", captured["body"]["messages"][0]["content"])
 
-    def test_api_auto_mode_prefers_deepseek_when_key_exists(self):
-        import os
-        from api_server import build_orchestrator
-
-        old_mode = os.environ.get("AIOPS_LLM")
-        old_key = os.environ.get("AIOPS_DEEPSEEK_API_KEY")
-        try:
-            os.environ.pop("AIOPS_LLM", None)
-            os.environ["AIOPS_DEEPSEEK_API_KEY"] = "sk-test"
-            orchestrator = build_orchestrator()
-            self.assertIsInstance(orchestrator.rca.llm_client, DeepSeekLLMClient)
-            orchestrator.close()
-        finally:
-            if old_mode is None:
-                os.environ.pop("AIOPS_LLM", None)
-            else:
-                os.environ["AIOPS_LLM"] = old_mode
-            if old_key is None:
-                os.environ.pop("AIOPS_DEEPSEEK_API_KEY", None)
-            else:
-                os.environ["AIOPS_DEEPSEEK_API_KEY"] = old_key
-
-    def test_api_auto_mode_falls_back_without_key(self):
-        import os
-        from api_server import build_orchestrator
-
-        old_mode = os.environ.get("AIOPS_LLM")
-        old_key = os.environ.get("AIOPS_DEEPSEEK_API_KEY")
-        try:
-            os.environ.pop("AIOPS_LLM", None)
-            os.environ.pop("AIOPS_DEEPSEEK_API_KEY", None)
-            orchestrator = build_orchestrator()
-            self.assertIsNone(orchestrator.rca.llm_client)
-            orchestrator.close()
-        finally:
-            if old_mode is None:
-                os.environ.pop("AIOPS_LLM", None)
-            else:
-                os.environ["AIOPS_LLM"] = old_mode
-            if old_key is None:
-                os.environ.pop("AIOPS_DEEPSEEK_API_KEY", None)
-            else:
-                os.environ["AIOPS_DEEPSEEK_API_KEY"] = old_key
-
     def test_fastapi_entry_runs_real_routes(self):
         try:
             from fastapi.testclient import TestClient
