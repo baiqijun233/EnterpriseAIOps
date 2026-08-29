@@ -291,20 +291,6 @@ class AIOpsAgentTests(unittest.TestCase):
         self.assertEqual(checker.check()["status"], "not_ready")
         orchestrator.close()
 
-    def test_readiness_checker_reports_postgres_storage_mode(self):
-        class PostgresTaskStore:
-            def health_check(self, timeout=2.0):
-                return None
-
-            def close(self):
-                return None
-
-        orchestrator = AIOpsOrchestrator()
-        orchestrator.store = PostgresTaskStore()
-        result = ReadinessChecker(orchestrator).check()
-        self.assertEqual(result["checks"]["storage"]["mode"], "postgres")
-        orchestrator.close()
-
     def test_http_readiness_endpoint_returns_503_for_closed_storage(self):
         server = create_server(port=0)
         server.orchestrator.store.close()

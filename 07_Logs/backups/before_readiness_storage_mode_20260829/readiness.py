@@ -60,7 +60,7 @@ class ReadinessChecker:
         checks = {
             "storage": self._probe_required(
                 getattr(self.orchestrator, "store", None),
-                mode=self._storage_mode(getattr(self.orchestrator, "store", None)),
+                mode="sqlite",
             ),
             "event_bus": self._probe_required(
                 getattr(self.orchestrator, "event_bus", None),
@@ -147,14 +147,3 @@ class ReadinessChecker:
     @staticmethod
     def _component_name(component: Any) -> str:
         return type(component).__name__ if component is not None else "missing"
-
-    @staticmethod
-    def _storage_mode(storage: Any) -> str:
-        """用存储实现类型标记模式，避免 PostgreSQL 被误报成 SQLite。"""
-        if storage is None:
-            return "missing"
-        if type(storage).__name__ == "PostgresTaskStore":
-            return "postgres"
-        if type(storage).__name__ == "TaskStore":
-            return "sqlite"
-        return type(storage).__name__

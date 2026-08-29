@@ -205,3 +205,11 @@
 - 重新构建 API/Worker 镜像成功；51 项自动化测试、Python 编译检查、Compose 配置校验和 `git diff --check` 均通过。
 - 新增备份：`07_Logs\\backups\\before_config_alignment_20260829`。
 - 当前仍保留的上线前适配项：生产密钥、TLS/反向代理、真实集群权限、压测与灾备，已记录在 `05_Docs\\正式上线升级计划.md`，不影响本地或容器演示运行。
+
+## 2026-08-29 - 独立运行完整验收
+
+- 使用独立 Compose 项目名 `project024_verify`，从镜像构建开始启动 API、Worker、Redis、PostgreSQL、Kafka、Qdrant 和 Neo4j，未触碰其他项目容器。
+- 默认离线模式验收通过：API `/health`、`/ready`、告警提交、四阶段编排、任务查询和 Worker 健康检查均正常，任务状态为 `resolved`。
+- 真实适配模式验收通过：切换 PostgreSQL、Kafka、Qdrant 后 `/ready` 显示 `postgres`、`KafkaEventBus`，任务写入 PostgreSQL，Kafka 四个业务主题可见，Qdrant `/healthz` 正常。
+- 修复就绪检查将 PostgreSQL 误显示为 SQLite 的问题，并新增回归测试；自动化测试由 51 项增至 52 项，全部通过。
+- 验证结束仅停止并移除 `project024_verify` 容器和网络，保留其命名卷；其他项目容器仍保持运行。
