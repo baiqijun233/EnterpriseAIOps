@@ -229,3 +229,11 @@
 - 新增 `LICENSE`、`CONTRIBUTING.md`、`SECURITY.md`、`CHANGELOG.md` 和 GitHub Actions 测试工作流，使仓库具备基础开源项目结构。
 - GitHub 仓库已设置中文简介和 `aiops`、`multi-agent`、`python`、`deepseek`、`kafka`、`observability`、`sre` Topics。
 - 参考项目仅用于展示结构对照；未复制其代码、图片或虚构数据。
+
+## 2026-08-29 - GitHub 主页展示风格调整
+
+- README 顶部改为居中标题、徽章、流程标语和快速导航，统一为项目展示页风格。
+- 将“运行截图”整理为“项目预览”，补充横幅、Swagger、就绪检查和独立验收报告展示。
+- 统一章节标题、图标和路线图结构，修正导航锚点，未改动业务代码。
+- 删除“学习、求职展示”等弱化项目价值的表述，改为面向云原生与企业后端运维场景的项目定位。
+- 已核对 GitHub 远程状态：当前四个公开项目均尚未创建 Release、版本标签或 Deployment；后续可统一补充 v0.1.0 发布和 GHCR 镜像工作流。

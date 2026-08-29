@@ -1,53 +1,46 @@
-<div align="center">
-
 # EnterpriseAIOps
 
-### 企业级多Agent智能运维系统
-
-[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](02_Source/agent_tech_portfolio)
-[![CI](https://github.com/baiqijun233/EnterpriseAIOps/actions/workflows/ci.yml/badge.svg)](https://github.com/baiqijun233/EnterpriseAIOps/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](02_Source/agent_tech_portfolio/docker-compose.production.yml)
-[![Tests](https://img.shields.io/badge/tests-52%20passed-2ea44f)](06_Tests)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-
-**告警输入 → 多Agent分析 → 安全审批 → 可审计自愈**
-
-</div>
-
-> 一个可以独立启动、失败可恢复、默认安全可控，并支持 DeepSeek 与企业基础设施适配的智能运维平台。
-
-<details>
-<summary>📌 快速导航</summary>
-
-[项目预览](#项目预览) · [核心能力](#核心能力) · [快速开始](#快速开始) · [配置](#配置) · [常用接口](#常用接口) · [测试与验证](#测试与验证) · [当前边界与路线图](#当前边界与路线图)
-
-</details>
-
-面向云原生和企业后端场景的多 Agent 智能运维项目。系统将异常检测、拓扑根因分析、故障自愈建议和变更审批串成可恢复的事件驱动流程，并通过安全护栏、审计记录和可替换基础设施适配层控制自动化风险。
-
-项目重点不是把所有组件堆在一起，而是提供一条可恢复、可审计、可独立运行的运维任务链路：异常需要多算法确认，修复默认只做 dry-run，高风险变更必须经过审批，外部依赖不可用时可以安全降级。
-
-## 项目预览
-
-### 项目横幅
+## 企业级多Agent智能运维系统
 
 ![EnterpriseAIOps 项目横幅](03_Assets/screenshots/project-banner.png)
 
-### API 与验收界面
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](02_Source/agent_tech_portfolio)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](02_Source/agent_tech_portfolio/docker-compose.production.yml)
+[![Tests](https://img.shields.io/badge/tests-52%20passed-2ea44f)](06_Tests)
+[![CI](https://github.com/baiqijun233/EnterpriseAIOps/actions/workflows/ci.yml/badge.svg)](https://github.com/baiqijun233/EnterpriseAIOps/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Swagger 页面可直接查看和调试健康检查、告警提交、任务查询与审批恢复接口。
+中文 | [运行手册](05_Docs/运行手册.md) | [正式上线升级计划](05_Docs/正式上线升级计划.md) | [安全政策](SECURITY.md) | [贡献指南](CONTRIBUTING.md)
 
-![EnterpriseAIOps Swagger API](03_Assets/screenshots/enterprise-aiops-swagger.png)
+一个面向云原生和企业后端场景的多 Agent 智能运维项目。系统将异常检测、拓扑根因分析、故障自愈建议和变更审批串成可恢复的事件驱动流程，并通过安全护栏、审计记录和可替换基础设施适配层控制自动化风险。
 
-独立验收报告来自真实测试、Docker Compose 和 DeepSeek 调用链路。
+> 项目定位：AI 应用开发、Agent 工程和 Python 后端开发岗位的可运行技术项目。
 
-![EnterpriseAIOps 验收报告](03_Assets/screenshots/verification-report.png)
+## 项目亮点
 
-就绪检查接口的实际返回：
+- **多 Agent 协作**：监控 Agent、RCA 根因分析 Agent、自愈 Agent、审批 Agent 分工处理运维事件。
+- **可解释异常检测**：3-Sigma、EWMA、Isolation Forest 三种算法投票确认异常，降低单一规则误报。
+- **可恢复编排**：阶段级重试、SQLite 检查点、审批等待与恢复，API 重启后仍可查询任务。
+- **安全自动化**：dry-run 默认保护、限流、爆炸半径阈值、熔断、L0/L1/L2 审批和执行后健康检查。
+- **DeepSeek 优先**：配置 `AIOPS_DEEPSEEK_API_KEY` 后自动使用 DeepSeek；没有密钥时自动回退到离线模式。
+- **生产适配边界**：已提供 PostgreSQL、Kafka、Redis/Celery、Neo4j、Qdrant、CMDB、Loki、Jaeger 等适配层。
+- **可独立运行**：默认只需 Python 标准库；也可以用 Docker Compose 启动 API、Worker 和基础设施服务。
+
+## 运行截图
+
+以下截图来自本项目实际运行，不是静态样稿：
+
+| Swagger API 界面 | 独立验收报告 |
+| --- | --- |
+| ![EnterpriseAIOps Swagger API](03_Assets/screenshots/enterprise-aiops-swagger.png) | ![EnterpriseAIOps 验收报告](03_Assets/screenshots/verification-report.png) |
+
+就绪检查接口实际返回：
 
 ![EnterpriseAIOps Ready Response](03_Assets/screenshots/ready-response.png)
 
-## 🧩 运行架构
+Swagger 页面可直接查看并调试 `/health`、`/ready`、`/metrics`、告警提交、任务查询和审批恢复接口。验收报告记录了 52 项自动化测试、DeepSeek RCA、Celery Worker、PostgreSQL、Kafka、Qdrant 和 API 重启恢复结果。
+
+## 架构
 
 ```mermaid
 flowchart LR
@@ -64,7 +57,7 @@ flowchart LR
     H -.任务状态.-> K[(SQLite / PostgreSQL)]
 ```
 
-## ✨ 核心能力
+## 能力清单
 
 | 模块 | 已实现能力 | 默认模式 |
 | --- | --- | --- |
@@ -77,7 +70,7 @@ flowchart LR
 | 异步任务 | Celery Worker、Redis Broker、Worker 就绪检查 | 按需启用 |
 | 外部适配 | PostgreSQL、Kafka、Neo4j、Qdrant、CMDB、Loki、Jaeger | 按需启用 |
 
-## ⚡ 快速开始
+## 快速开始
 
 ### 方式一：离线运行
 
@@ -127,7 +120,7 @@ $env:AIOPS_DEEPSEEK_MODEL = 'deepseek-chat'
 
 也可以保持 `AIOPS_LLM=auto`。检测到 `AIOPS_DEEPSEEK_API_KEY` 时会自动优先使用 DeepSeek，没有密钥则离线运行。
 
-## 🔌 常用接口
+## API 入口
 
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
@@ -141,7 +134,7 @@ $env:AIOPS_DEEPSEEK_MODEL = 'deepseek-chat'
 
 标准库 HTTP API 默认监听 `8000`，Docker Compose 中 FastAPI API 默认映射到宿主机 `18024`。
 
-## 🔐 配置
+## 配置切换
 
 复制 `02_Source/agent_tech_portfolio/.env.example` 作为变量参考，然后在运行环境中设置变量。程序不会自动读取 `.env` 文件。
 
@@ -155,7 +148,7 @@ $env:AIOPS_DEEPSEEK_MODEL = 'deepseek-chat'
 | `AIOPS_REPAIR_EXECUTOR` | `dry-run` / `allowlist` | 修复执行策略，默认安全模式 |
 | `AIOPS_AUTH_ENABLED` | `true` / `false` | 是否启用 API Key 认证 |
 
-## 🛡️ 安全边界
+## 安全边界
 
 - 默认是 dry-run，不会直接执行系统命令。
 - allowlist 模式只接受显式参数列表，使用 `shell=False`，不接受任意 shell 字符串。
@@ -163,7 +156,7 @@ $env:AIOPS_DEEPSEEK_MODEL = 'deepseek-chat'
 - API Key 仅从环境变量读取，日志和审计不会保存原始密钥。
 - DeepSeek、数据库和其他生产凭证不包含在仓库中。
 
-## ✅ 测试与验证
+## 测试与验证
 
 ```powershell
 python -m unittest discover -s 06_Tests -p 'test_*.py'
@@ -179,7 +172,7 @@ python -m compileall -q 02_Source 06_Tests
 - API 重启后任务查询和 Celery 异步任务完成。
 - Docker API/Worker 镜像构建和 Compose 配置校验。
 
-## 📁 项目结构
+## 项目目录
 
 ```text
 00_Project_Workbench/  项目进度、维护说明和长期决策
@@ -193,23 +186,17 @@ python -m compileall -q 02_Source 06_Tests
 08_Deliverables/       交付物
 ```
 
-## 📚 文档导航
+## 文档导航
 
 - [运行手册](05_Docs/运行手册.md)：离线 API、FastAPI、Docker、Worker 和外部组件启动方式。
 - [正式上线升级计划](05_Docs/正式上线升级计划.md)：生产环境需要补齐的服务器、权限、证书、监控和灾备事项。
 - [验收报告页面](03_Assets/screenshots/verification-report.html)：可在浏览器打开的真实运行验收摘要。
 - [更新记录](CHANGELOG.md)：按版本记录功能变化和验证范围。
 
-## 🗺️ 当前边界与路线图
+## 正式上线说明
 
-当前代码已达到“替换环境适配参数即可接入”的上线候选状态：本地、Docker、DeepSeek、Worker、PostgreSQL、Kafka 和 Qdrant 链路均已完成独立验证。
+本项目已经具备“替换环境适配参数即可接入”的工程结构。正式上线仍需配置企业级数据库、Kafka 集群、密钥管理、TLS、容器平台、监控告警、变更平台 API、压测、备份恢复和灰度发布。详细清单见 [`05_Docs/正式上线升级计划.md`](05_Docs/正式上线升级计划.md)。
 
-正式部署仍需在目标环境补齐企业级数据库和 Kafka 集群参数、密钥管理、TLS/反向代理、容器平台权限、监控告警、变更平台 API、压测、备份恢复和灰度发布。详细清单见 [`05_Docs/正式上线升级计划.md`](05_Docs/正式上线升级计划.md)。
+## 许可证
 
-后续可继续增强：Loki/Jaeger 全链路观测、CMDB 与向量库的企业接口、真实变更平台回滚、多人权限和更细粒度的审批策略。
-
-## 🤝 贡献与许可证
-
-欢迎通过 Issue 反馈问题或提交 Pull Request。提交前请运行完整测试，并确保不包含任何 API 密钥、生成缓存或本地运行数据。
-
-本项目面向云原生与企业后端运维场景，使用 [MIT License](LICENSE)。生产使用前请根据组织要求补充许可证、依赖合规和安全审计。
+本项目当前用于学习、求职展示和技术验证。生产使用前请根据组织要求补充许可证、依赖合规和安全审计。
