@@ -23,9 +23,6 @@ class RepairExecutor(Protocol):
     def health_check(self, timeout: float = 2.0) -> None:
         """检查执行器配置，不执行修复动作。"""
 
-    def verify(self, service: str, proposal: Mapping[str, Any], execution: Mapping[str, Any]) -> bool:
-        """执行后验证服务是否恢复；未配置验证器时返回 True。"""
-
     def close(self) -> None:
         """释放执行器资源。"""
 
@@ -50,10 +47,6 @@ class DryRunRepairExecutor:
     def health_check(self, timeout: float = 2.0) -> None:
         _validate_timeout(timeout)
 
-    def verify(self, service: str, proposal: Mapping[str, Any], execution: Mapping[str, Any]) -> bool:
-        _validate_inputs(service, proposal, str(execution.get("task_id", "dry-run")))
-        return True
-
     def close(self) -> None:
         return
 
@@ -69,7 +62,6 @@ class AllowlistRepairExecutor:
         commands: Mapping[str, Sequence[str]],
         timeout: float = 30.0,
         runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
-        verifier: Callable[[str, Mapping[str, Any], Mapping[str, Any]], bool] | None = None,
     ) -> None:
         if not isinstance(commands, Mapping):
             raise ValueError("commands 必须是对象")
@@ -86,7 +78,6 @@ class AllowlistRepairExecutor:
         self.commands = normalized
         self.timeout = float(timeout)
         self._runner = runner or subprocess.run
-        self._verifier = verifier
 
     def execute(self, service: str, proposal: Mapping[str, Any], task_id: str) -> dict[str, Any]:
         _validate_inputs(service, proposal, task_id)
@@ -127,12 +118,6 @@ class AllowlistRepairExecutor:
         _validate_timeout(timeout)
         if not self.commands:
             raise RuntimeError("未配置任何修复命令")
-
-    def verify(self, service: str, proposal: Mapping[str, Any], execution: Mapping[str, Any]) -> bool:
-        _validate_inputs(service, proposal, str(execution.get("task_id", "unknown")))
-        if self._verifier is None:
-            return True
-        return bool(self._verifier(service, proposal, execution))
 
     def close(self) -> None:
         return

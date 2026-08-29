@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import json
-import random
 import threading
 import time
 import uuid
@@ -76,58 +75,9 @@ class EwmaDetector:
         return alert.value > ewma * 1.2
 
 
-class IsolationForestDetector:
-    """标准库实现的一维 Isolation Forest，用于补充突变和趋势检测。"""
-
-    def __init__(self, n_estimators: int = 25, sample_size: int = 64, seed: int = 7) -> None:
-        if not isinstance(n_estimators, int) or isinstance(n_estimators, bool) or n_estimators < 5:
-            raise ValueError("n_estimators 必须是不小于 5 的整数")
-        if not isinstance(sample_size, int) or isinstance(sample_size, bool) or sample_size < 2:
-            raise ValueError("sample_size 必须是不小于 2 的整数")
-        self.n_estimators = n_estimators
-        self.sample_size = sample_size
-        self.seed = seed
-
-    def detect(self, alert: Alert) -> bool:
-        if len(alert.baseline) < 3:
-            return False
-        values = [float(item) for item in alert.baseline]
-        if min(values) <= alert.value <= max(values):
-            return False
-        rng = random.Random(self.seed)
-        sample = values if len(values) <= self.sample_size else rng.sample(values, self.sample_size)
-        max_depth = math.ceil(math.log2(max(len(sample), 2)))
-        path_lengths = [self._path_length(alert.value, sample, max_depth, rng) for _ in range(self.n_estimators)]
-        average_path = sum(path_lengths) / len(path_lengths)
-        normalizer = self._average_path_length(len(sample))
-        score = 2 ** (-average_path / max(normalizer, 1e-9))
-        return score >= 0.6
-
-    def _path_length(self, value: float, values: list[float], depth: int, rng: random.Random) -> float:
-        if depth <= 0 or len(values) <= 1:
-            return depth + self._average_path_length(len(values))
-        low, high = min(values), max(values)
-        if low == high or low <= value <= high and len(values) <= 2:
-            return depth + self._average_path_length(len(values))
-        split = rng.uniform(low, high)
-        branch = [item for item in values if item < split] if value < split else [item for item in values if item >= split]
-        if not branch or len(branch) == len(values):
-            return depth + self._average_path_length(len(values))
-        return self._path_length(value, branch, depth - 1, rng)
-
-    @staticmethod
-    def _average_path_length(size: int) -> float:
-        if size <= 1:
-            return 0.0
-        if size == 2:
-            return 1.0
-        harmonic = sum(1.0 / item for item in range(1, size))
-        return 2 * harmonic - (2 * (size - 1) / size)
-
-
 class MonitorAgent:
     def __init__(self) -> None:
-        self.detectors = (ThreeSigmaDetector(), EwmaDetector(), IsolationForestDetector())
+        self.detectors = (ThreeSigmaDetector(), EwmaDetector())
 
     def confirm(self, alert: Alert) -> dict[str, Any]:
         votes = [detector.detect(alert) for detector in self.detectors]
@@ -151,12 +101,11 @@ class RcaAgent:
             visited.add(current)
             queue.extend(self._dependencies(current))
         related = sorted(visited)
-        confidence, confidence_method = self._calculate_confidence(service, alert, related)
+        confidence = 0.72 if len(related) > 1 else 0.48
         result = {
             "service": service,
             "root_cause": f"{service} 近期指标异常",
             "confidence": confidence,
-            "confidence_method": confidence_method,
             "impact_chain": related,
             "evidence": alert,
         }
@@ -169,19 +118,6 @@ class RcaAgent:
             except Exception as exc:
                 result["llm_error"] = str(exc)
         return result
-
-    @staticmethod
-    def _calculate_confidence(service: str, alert: dict[str, Any], related: list[str]) -> tuple[float, str]:
-        """有部署证据时使用贝叶斯后验；缺少先验数据时保留拓扑启发式基线。"""
-        recent_deploy = alert.get("alert", {}).get("recent_deploy")
-        if isinstance(recent_deploy, bool):
-            prior = 0.30
-            likelihood_if_deploy = 0.90 if recent_deploy else 0.35
-            likelihood_if_other = 0.20 if recent_deploy else 0.55
-            numerator = likelihood_if_deploy * prior
-            denominator = numerator + likelihood_if_other * (1 - prior)
-            return (round(numerator / denominator, 3) if denominator else 0.0, "bayesian")
-        return (0.72 if len(related) > 1 else 0.48, "topology_heuristic")
 
     def _dependencies(self, service: str) -> list[str]:
         if hasattr(self.topology, "get_dependencies"):
@@ -595,9 +531,6 @@ class AIOpsOrchestrator:
             if not isinstance(execution, dict) or execution.get("success") is not True:
                 raise RuntimeError("修复执行器返回失败结果")
             execution.setdefault("audit_id", approval.get("audit_id"))
-            verifier = getattr(self.repair_executor, "verify", None)
-            if callable(verifier) and not verifier(service, proposal, execution):
-                raise RuntimeError("修复后健康验证未通过")
             state["execution"] = execution
             state["result"]["resolved"] = True
             state["events"].append({"stage": "executed", "result": execution})

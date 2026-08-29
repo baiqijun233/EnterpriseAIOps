@@ -1,6 +1,6 @@
 # 企业级多 Agent 智能运维系统
 
-本项目展示异常检测投票（3-Sigma、EWMA、Isolation Forest）、拓扑 BFS 根因分析、故障自愈建议、dry-run、限流、爆炸半径、熔断、风险审批和审计记录，并提供一个不依赖第三方库的本地 HTTP API 初版。
+本项目展示异常检测投票、拓扑 BFS 根因分析、故障自愈建议、dry-run、限流、爆炸半径、熔断、风险审批和审计记录，并提供一个不依赖第三方库的本地 HTTP API 初版。
 
 当前核心链路支持阶段级重试、SQLite 检查点保存、等待审批后恢复，以及从 `04_Data\topology.json` 加载服务拓扑。审批恢复使用 SQLite 条件更新，同一任务在多个 API 进程中也只能成功审批一次。API 重启后可继续查询已保存任务。
 
@@ -139,8 +139,6 @@ python -m api_server
 Kafka 发送失败不会让主流程直接崩溃，错误会记录在任务的 `event_bus_errors` 字段，便于降级和排查。
 
 真实修复执行器默认关闭。`AIOPS_REPAIR_EXECUTOR=dry-run` 只记录意图；显式设置 `allowlist` 后，通过 `AIOPS_REPAIR_COMMANDS` 配置 `restart`/`rollback` 参数列表，执行阶段会记录 `executing`、`resolved` 或 `execution_failed`，并在失败时触发熔断。命令始终以参数列表运行，不经过 shell。
-
-RCA 在告警包含 `recent_deploy` 证据时会计算贝叶斯后验置信度，并在结果中标记 `confidence_method=bayesian`；缺少先验数据时使用拓扑启发式基线。可运行 `python 06_Tests/run_local_benchmark.py` 生成固定种子的检测基准报告到 `07_Logs`。
 
 项目提供 `Dockerfile` 和生产 Compose 中的 `api`、`worker` 服务。Compose 构建上下文为项目根目录，API 使用 FastAPI，Worker 使用 Celery `solo` 池，SQLite 数据保存在 `aiops_app_data` 命名卷。默认事件总线、拓扑和修复执行器仍为离线安全模式。
 

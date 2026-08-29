@@ -15,7 +15,6 @@ from aiops_agent import (
     AIOpsOrchestrator,
     Alert,
     CircuitBreaker,
-    IsolationForestDetector,
     RcaAgent,
     SafetyGuard,
     SlidingWindowRateLimiter,
@@ -36,19 +35,6 @@ from worker_health import check_worker
 
 
 class AIOpsAgentTests(unittest.TestCase):
-    def test_isolation_forest_detector_flags_obvious_outlier(self):
-        detector = IsolationForestDetector(n_estimators=15, seed=11)
-        self.assertTrue(detector.detect(Alert("order-service", "cpu", 95, [40, 41, 39, 42, 40])))
-        self.assertFalse(detector.detect(Alert("order-service", "cpu", 41, [40, 41, 39, 42, 40])))
-
-    def test_rca_bayesian_confidence_uses_recent_deploy_evidence(self):
-        result = RcaAgent({"order-service": ["mysql"]}).analyze(
-            "order-service",
-            {"alert": {"recent_deploy": True}},
-        )
-        self.assertGreater(result["confidence"], 0.6)
-        self.assertEqual(result["confidence_method"], "bayesian")
-
     def test_dry_run_executor_never_runs_system_command(self):
         executor = DryRunRepairExecutor()
         result = executor.execute("order-service", {"action": "restart"}, "task-1")
@@ -107,20 +93,6 @@ class AIOpsAgentTests(unittest.TestCase):
         self.assertEqual(record.status, "execution_failed")
         self.assertFalse(record.state["execution"]["success"])
         self.assertIn("execution_failed", [event["stage"] for event in record.state["events"]])
-        orchestrator.close()
-
-    def test_post_execution_health_failure_enters_execution_failed(self):
-        class UnhealthyExecutor(DryRunRepairExecutor):
-            def execute(self, service, proposal, task_id):
-                return {"success": True, "executed": True, "task_id": task_id}
-
-            def verify(self, service, proposal, execution):
-                return False
-
-        orchestrator = AIOpsOrchestrator(repair_executor=UnhealthyExecutor())
-        record = orchestrator.handle(Alert("order-service", "cpu", 95, [40, 41, 39, 42, 40]))
-        self.assertEqual(record.status, "execution_failed")
-        self.assertIn("健康验证未通过", record.state["execution"]["error"])
         orchestrator.close()
 
     def test_redis_safety_guard_shares_rate_limit_and_circuit_state(self):
