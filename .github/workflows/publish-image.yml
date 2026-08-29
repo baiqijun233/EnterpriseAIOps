@@ -31,7 +31,7 @@ jobs:
       - name: Build image
         uses: docker/build-push-action@v6
         with:
-          context: 02_Source/agent_tech_portfolio
+          context: .
           file: 02_Source/agent_tech_portfolio/Dockerfile
           push: ${{ startsWith(github.ref, 'refs/tags/v') }}
           tags: |
