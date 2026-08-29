@@ -26,9 +26,6 @@ from event_bus import InMemoryEventBus, KafkaEventBus
 from fastapi_app import create_app
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient
 from repair_executor import AllowlistRepairExecutor, DryRunRepairExecutor
-from cmdb import JsonCMDB
-from rag import Document, HttpVectorStore, InMemoryVectorStore, RAGService
-from observability import Observability
 from adapters.neo4j_topology import Neo4jTopologyProvider
 from adapters.redis_safety import RedisSafetyGuard
 from adapters.task_queue import CeleryTaskDispatcher, RedisTaskQueue
@@ -39,38 +36,6 @@ from worker_health import check_worker
 
 
 class AIOpsAgentTests(unittest.TestCase):
-    def test_kafka_stage_topics_are_separated(self):
-        from event_bus import TOPICS
-        self.assertEqual(TOPICS["monitor"], "aiops.alerts")
-        self.assertEqual(TOPICS["heal"], "aiops.commands")
-        self.assertEqual(TOPICS["change"], "aiops.audit")
-
-    def test_cmdb_and_rag_adapters_work_offline(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "cmdb.json"
-            path.write_text('{"order-service":{"owner":"team-a"}}', encoding="utf-8")
-            self.assertEqual(JsonCMDB(path).get_service("order-service")["owner"], "team-a")
-        store = InMemoryVectorStore([Document("d1", "order-service rollback playbook", {"action": "rollback"})])
-        self.assertEqual(store.search("order-service rollback")[0].document_id, "d1")
-
-    def test_observability_writes_json_log_and_trace_id(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "events.jsonl"
-            observer = Observability(path)
-            observer.record({"stage": "monitor"})
-            observer.trace("monitor", "abc123")
-            self.assertEqual(len(path.read_text(encoding="utf-8").splitlines()), 2)
-
-    def test_http_vector_store_parses_search_response(self):
-        class FakeResponse:
-            status = 200
-            def __enter__(self): return self
-            def __exit__(self, *args): return False
-            def read(self): return b'[{"document_id":"d1","text":"rollback","metadata":{"service":"order-service"}}]'
-
-        with patch("rag.urlopen", lambda request, timeout: FakeResponse()):
-            docs = HttpVectorStore("http://vector-db").search("rollback")
-        self.assertEqual(docs[0].document_id, "d1")
     def test_isolation_forest_detector_flags_obvious_outlier(self):
         detector = IsolationForestDetector(n_estimators=15, seed=11)
         self.assertTrue(detector.detect(Alert("order-service", "cpu", 95, [40, 41, 39, 42, 40])))

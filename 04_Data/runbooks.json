@@ -1,0 +1,12 @@
+[
+  {
+    "document_id": "runbook-order-cpu",
+    "text": "order-service CPU 持续升高时，先确认近期部署和 payment-service 依赖，再执行受审批保护的 rollback。",
+    "metadata": {"service": "order-service", "action": "rollback"}
+  },
+  {
+    "document_id": "runbook-payment-timeout",
+    "text": "payment-service 超时可先执行 restart，执行后检查健康状态，失败则进入人工审批。",
+    "metadata": {"service": "payment-service", "action": "restart"}
+  }
+]

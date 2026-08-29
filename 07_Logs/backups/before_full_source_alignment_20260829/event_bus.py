@@ -8,18 +8,6 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Protocol
 
 
-TOPICS = {
-    "monitor": "aiops.alerts",
-    "rca": "aiops.events",
-    "heal": "aiops.commands",
-    "change": "aiops.audit",
-    "approval_resume": "aiops.audit",
-    "executed": "aiops.audit",
-    "execution_failed": "aiops.audit",
-    "auto_rollback": "aiops.commands",
-}
-
-
 class EventBus(Protocol):
     def publish(self, topic: str, payload: dict[str, Any]) -> None:
         """发布一个可 JSON 序列化的事件。"""

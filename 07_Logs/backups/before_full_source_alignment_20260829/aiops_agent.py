@@ -13,11 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from event_bus import EventBus, InMemoryEventBus, TOPICS
+from event_bus import EventBus, InMemoryEventBus
 from llm_adapter import LLMClient
 from repair_executor import DryRunRepairExecutor, RepairExecutor
-from observability import Observability
-from rag import RAGService
 from common.storage import TaskRecord, TaskStore, utc_now
 
 
@@ -137,11 +135,9 @@ class MonitorAgent:
 
 
 class RcaAgent:
-    def __init__(self, topology: Any | None = None, llm_client: LLMClient | None = None, cmdb: Any | None = None, rag_service: RAGService | None = None) -> None:
+    def __init__(self, topology: Any | None = None, llm_client: LLMClient | None = None) -> None:
         self.topology = topology or {}
         self.llm_client = llm_client
-        self.cmdb = cmdb
-        self.rag_service = rag_service
 
     def analyze(self, service: str, alert: dict[str, Any]) -> dict[str, Any]:
         if not service:
@@ -164,16 +160,6 @@ class RcaAgent:
             "impact_chain": related,
             "evidence": alert,
         }
-        if self.cmdb is not None:
-            try:
-                result["cmdb"] = self.cmdb.get_service(service)
-            except Exception as exc:
-                result["cmdb_error"] = str(exc)
-        if self.rag_service is not None:
-            try:
-                result["rag"] = self.rag_service.explain(f"{service} {alert}", result)
-            except Exception as exc:
-                result["rag_error"] = str(exc)
         if self.llm_client is not None:
             try:
                 result["explanation"] = self.llm_client.generate(
@@ -389,17 +375,9 @@ class ChangeAgent:
     def approve(self, proposal: dict[str, Any]) -> dict[str, Any]:
         risk = round(float(proposal.get("blast_radius", 1.0)) + (0.15 if proposal.get("action") == "rollback" else 0.25), 3)
         guard_allowed = bool(proposal.get("safety_guard", {}).get("allowed", True))
-        if risk <= 0.35:
-            approval_level, required_role = "L0", "operator"
-        elif risk <= 0.65:
-            approval_level, required_role = "L1", "approver"
-        else:
-            approval_level, required_role = "L2", "admin"
-        approved = bool(proposal.get("dry_run")) and guard_allowed and approval_level == "L0"
+        approved = bool(proposal.get("dry_run")) and guard_allowed and risk < 0.8
         return {
             "approved": approved,
-            "approval_level": approval_level,
-            "required_role": required_role,
             "risk": risk,
             "guard_allowed": guard_allowed,
             "auditor": "local-policy",
@@ -417,9 +395,6 @@ class AIOpsOrchestrator:
         llm_client: LLMClient | None = None,
         safety_guard: SafetyGuard | None = None,
         repair_executor: RepairExecutor | None = None,
-        cmdb: Any | None = None,
-        rag_service: RAGService | None = None,
-        observability: Observability | None = None,
     ) -> None:
         if not isinstance(max_retries, int) or isinstance(max_retries, bool) or not 0 <= max_retries <= 5:
             raise ValueError("max_retries 必须是 0 到 5 的整数")
@@ -428,19 +403,18 @@ class AIOpsOrchestrator:
         self.rca = RcaAgent(topology or {
             "order-service": ["payment-service", "inventory-service"],
             "payment-service": ["mysql"],
-        }, llm_client=llm_client, cmdb=cmdb, rag_service=rag_service)
+        }, llm_client=llm_client)
         self.heal = HealAgent(safety_guard=safety_guard)
         self.change = ChangeAgent()
         self.max_retries = max_retries
         self.event_bus = event_bus or InMemoryEventBus()
         self.repair_executor = repair_executor or DryRunRepairExecutor()
-        self.observability = observability or Observability()
         self._approval_lock = threading.RLock()
 
     def handle(self, alert: Alert) -> TaskRecord:
         self._validate_alert(alert)
         task_id = uuid.uuid4().hex
-        state: dict[str, Any] = {"alert": alert.__dict__, "events": [], "trace_id": uuid.uuid4().hex}
+        state: dict[str, Any] = {"alert": alert.__dict__, "events": []}
         record = TaskRecord(task_id, "aiops", "running", state, utc_now())
         self.store.save(record)
         try:
@@ -523,11 +497,6 @@ class AIOpsOrchestrator:
             approval = state.get("approval")
             if not isinstance(proposal, dict) or not isinstance(approval, dict):
                 raise ValueError("任务缺少可执行的修复方案")
-            required_role = str(approval.get("required_role", "approver")).strip().lower()
-            role_levels = {"manual": 100, "viewer": 10, "operator": 20, "approver": 30, "admin": 40}
-            actor_role = safe_actor["role"].lower()
-            if actor_role != "manual" and role_levels.get(actor_role, 0) < role_levels.get(required_role, 40):
-                raise ValueError(f"当前角色不足，{approval.get('approval_level', 'L1')} 需要 {required_role} 权限")
             state["approval"]["approved"] = True
             executing = TaskRecord(record.task_id, record.task_type, "executing", state, utc_now())
             if not self.store.save_if_status(executing, "awaiting_approval"):
@@ -586,12 +555,8 @@ class AIOpsOrchestrator:
 
     def _publish_event(self, topic: str, payload: dict[str, Any], state: dict[str, Any]) -> None:
         """事件总线故障不阻断主流程，但会留下可追踪记录。"""
-        stage = payload.get("stage")
-        topic = TOPICS.get(stage, topic)
-        payload.setdefault("correlation_id", state.get("trace_id"))
         try:
             self.event_bus.publish(topic, payload)
-            self.observability.record({"topic": topic, **payload})
         except Exception as exc:
             state.setdefault("event_bus_errors", []).append({
                 "topic": topic,
@@ -603,7 +568,6 @@ class AIOpsOrchestrator:
         self.store.close()
         self.heal.safety_guard.close()
         self.repair_executor.close()
-        self.observability.close()
         if hasattr(self.rca.topology, "close"):
             self.rca.topology.close()
 
@@ -633,21 +597,6 @@ class AIOpsOrchestrator:
             execution.setdefault("audit_id", approval.get("audit_id"))
             verifier = getattr(self.repair_executor, "verify", None)
             if callable(verifier) and not verifier(service, proposal, execution):
-                rollback_proposal = dict(proposal)
-                rollback_proposal["action"] = "rollback"
-                try:
-                    rollback_result = self.repair_executor.execute(
-                        service, rollback_proposal, record.task_id + "-rollback"
-                    )
-                    state["auto_rollback"] = rollback_result
-                    state["events"].append({"stage": "auto_rollback", "result": rollback_result})
-                    self._publish_event("aiops.commands", {
-                        "task_id": record.task_id,
-                        "stage": "auto_rollback",
-                        "result": rollback_result,
-                    }, state)
-                except Exception as rollback_exc:
-                    state["auto_rollback"] = {"success": False, "error": str(rollback_exc)}
                 raise RuntimeError("修复后健康验证未通过")
             state["execution"] = execution
             state["result"]["resolved"] = True

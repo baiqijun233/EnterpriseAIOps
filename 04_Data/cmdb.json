@@ -1,0 +1,16 @@
+{
+  "order-service": {
+    "name": "order-service",
+    "owner": "commerce-platform",
+    "environment": "demo",
+    "namespace": "aiops-demo",
+    "tier": "critical"
+  },
+  "payment-service": {
+    "name": "payment-service",
+    "owner": "commerce-platform",
+    "environment": "demo",
+    "namespace": "aiops-demo",
+    "tier": "critical"
+  }
+}

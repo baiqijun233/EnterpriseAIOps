@@ -16,9 +16,6 @@ from event_bus import create_event_bus
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient, OpenAICompatibleLLMClient
 from metrics import MetricsRegistry
 from repair_executor import AllowlistRepairExecutor, DryRunRepairExecutor
-from cmdb import HttpCMDB, JsonCMDB
-from observability import Observability
-from rag import Document, HttpVectorStore, InMemoryVectorStore, RAGService
 from readiness import ReadinessChecker
 from common.storage import TaskStore, record_to_dict
 from adapters.neo4j_topology import Neo4jTopologyProvider
@@ -102,39 +99,6 @@ def build_orchestrator() -> AIOpsOrchestrator:
         )
     else:
         raise ValueError("AIOPS_REPAIR_EXECUTOR 只能是 dry-run 或 allowlist")
-    cmdb_mode = os.getenv("AIOPS_CMDB", "none").strip().lower()
-    if cmdb_mode == "json":
-        cmdb = JsonCMDB(data_path / "cmdb.json")
-    elif cmdb_mode == "http":
-        cmdb = HttpCMDB(os.getenv("AIOPS_CMDB_URL", ""))
-    elif cmdb_mode == "none":
-        cmdb = None
-    else:
-        raise ValueError("AIOPS_CMDB 只能是 none、json 或 http")
-    rag_mode = os.getenv("AIOPS_RAG", "none").strip().lower()
-    if rag_mode == "json":
-        documents_path = data_path / "runbooks.json"
-        documents = []
-        if documents_path.is_file():
-            raw_documents = json.loads(documents_path.read_text(encoding="utf-8"))
-            if not isinstance(raw_documents, list):
-                raise ValueError("runbooks.json 必须是数组")
-            documents = [Document(str(item["document_id"]), str(item["text"]), dict(item.get("metadata", {}))) for item in raw_documents if isinstance(item, dict) and item.get("document_id") and item.get("text")]
-        rag_service = RAGService(InMemoryVectorStore(documents), llm_client=llm_client)
-    elif rag_mode == "http":
-        rag_service = RAGService(
-            HttpVectorStore(os.getenv("AIOPS_VECTOR_DB_URL", "")),
-            llm_client=llm_client,
-        )
-    elif rag_mode == "none":
-        rag_service = None
-    else:
-        raise ValueError("AIOPS_RAG 只能是 none、json 或 http")
-    observability = Observability(
-        log_path=os.getenv("AIOPS_LOG_PATH", "").strip() or None,
-        loki_url=os.getenv("AIOPS_LOKI_URL", ""),
-        jaeger_url=os.getenv("AIOPS_JAEGER_URL", ""),
-    )
     return AIOpsOrchestrator(
         store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
         topology=topology,
@@ -142,9 +106,6 @@ def build_orchestrator() -> AIOpsOrchestrator:
         llm_client=llm_client,
         safety_guard=safety_guard,
         repair_executor=repair_executor,
-        cmdb=cmdb,
-        rag_service=rag_service,
-        observability=observability,
     )
 
 

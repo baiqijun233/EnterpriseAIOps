@@ -79,7 +79,7 @@ $env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 python -m api_server
 ```
 
-项目提供 `docker-compose.kafka.yml` 作为单节点 Kafka 启动配置，也提供 `docker-compose.production.yml` 启动 Kafka、Redis、Neo4j。启动后可将 `AIOPS_EVENT_BUS` 设置为 `kafka`；事件按 `aiops.alerts`、`aiops.events`、`aiops.commands`、`aiops.audit` 分主题，消费失败消息进入对应 `.dlq`。
+项目提供 `docker-compose.kafka.yml` 作为单节点 Kafka 启动配置，也提供 `docker-compose.production.yml` 启动 Kafka、Redis、Neo4j。启动后可将 `AIOPS_EVENT_BUS` 设置为 `kafka`；默认 Topic 为 `aiops.events`，消费失败消息进入 `aiops.events.dlq`。
 
 生产适配依赖可统一安装：
 
