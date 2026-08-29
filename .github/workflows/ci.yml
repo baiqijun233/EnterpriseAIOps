@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run tests
+        run: python -m unittest discover -s 06_Tests -p 'test_*.py'
+      - name: Compile Python
+        run: python -m compileall -q 02_Source 06_Tests
+      - name: Check Compose
+        run: docker compose -f 02_Source/agent_tech_portfolio/docker-compose.production.yml config --quiet

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EnterpriseAIOps 验收报告</title>
+  <style>
+    :root { color-scheme: dark; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; }
+    body { margin: 0; background: #0d1117; color: #e6edf3; }
+    main { max-width: 1120px; margin: 0 auto; padding: 48px 32px 64px; }
+    .eyebrow { color: #58a6ff; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; font-weight: 700; }
+    h1 { margin: 10px 0 8px; font-size: 38px; }
+    .subtitle { color: #8b949e; margin: 0 0 28px; font-size: 16px; }
+    .banner { border: 1px solid #238636; background: #122117; color: #aff5b4; padding: 16px 18px; border-radius: 10px; font-weight: 700; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 24px 0; }
+    .metric, .panel { border: 1px solid #30363d; background: #161b22; border-radius: 10px; }
+    .metric { padding: 18px; }
+    .metric strong { display: block; font-size: 30px; color: #f0f6fc; }
+    .metric span { color: #8b949e; font-size: 13px; }
+    .panel { padding: 20px; margin-top: 16px; }
+    h2 { margin: 0 0 14px; font-size: 18px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { border-bottom: 1px solid #30363d; padding: 10px 8px; text-align: left; }
+    th { color: #8b949e; font-weight: 600; }
+    td:last-child { color: #aff5b4; font-weight: 700; }
+    code { color: #79c0ff; }
+    footer { color: #8b949e; font-size: 12px; margin-top: 24px; }
+    @media (max-width: 760px) { main { padding: 28px 18px; } .grid { grid-template-columns: repeat(2, 1fr); } h1 { font-size: 30px; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">EnterpriseAIOps / Verification</div>
+    <h1>企业级多Agent智能运维系统</h1>
+    <p class="subtitle">独立运行验收报告 · 2026-08-29</p>
+    <div class="banner">验收结论：通过。项目可在无当前对话依赖的情况下独立启动和运行。</div>
+    <section class="grid">
+      <div class="metric"><strong>52</strong><span>自动化测试全部通过</span></div>
+      <div class="metric"><strong>4</strong><span>Agent 阶段完整执行</span></div>
+      <div class="metric"><strong>7</strong><span>Docker 服务健康运行</span></div>
+      <div class="metric"><strong>100%</strong><span>任务最终状态 resolved</span></div>
+    </section>
+    <section class="panel">
+      <h2>核心链路</h2>
+      <table><thead><tr><th>检查项</th><th>实际结果</th><th>状态</th></tr></thead><tbody>
+        <tr><td>API 存活与就绪</td><td><code>/health</code>、<code>/ready</code> 返回 200</td><td>通过</td></tr>
+        <tr><td>HTTP 告警处理</td><td>Monitor → RCA → Heal → Change → Executed</td><td>通过</td></tr>
+        <tr><td>DeepSeek 调用</td><td>RCA 生成模型解释，无 <code>llm_error</code></td><td>通过</td></tr>
+        <tr><td>异步 Worker</td><td>Celery <code>aiops.handle_incident</code> 返回 resolved</td><td>通过</td></tr>
+        <tr><td>重启恢复</td><td>API 重启后仍可查询 Worker 产生的业务任务</td><td>通过</td></tr>
+      </tbody></table>
+    </section>
+    <section class="panel">
+      <h2>真实基础设施</h2>
+      <table><thead><tr><th>组件</th><th>验证内容</th><th>状态</th></tr></thead><tbody>
+        <tr><td>PostgreSQL 16</td><td>任务写入并通过 SQL 查询到记录</td><td>通过</td></tr>
+        <tr><td>Kafka 7.7</td><td><code>aiops.alerts/events/commands/audit</code> 主题可见</td><td>通过</td></tr>
+        <tr><td>Qdrant 1.13</td><td><code>/healthz</code> 正常，集合适配可用</td><td>通过</td></tr>
+        <tr><td>Redis 7.4</td><td>Broker 与安全状态适配可连接</td><td>通过</td></tr>
+        <tr><td>Neo4j 5.26</td><td>容器启动并提供拓扑适配</td><td>通过</td></tr>
+      </tbody></table>
+    </section>
+    <footer>数据来源：项目本地自动化测试、独立 Docker Compose 验收和 DeepSeek 实际调用。未包含任何 API 密钥。</footer>
+  </main>
+</body>
+</html>

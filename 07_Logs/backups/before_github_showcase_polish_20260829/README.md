@@ -2,8 +2,6 @@
 
 ## 企业级多Agent智能运维系统
 
-![EnterpriseAIOps 项目横幅](03_Assets/screenshots/project-banner.png)
-
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](02_Source/agent_tech_portfolio)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](02_Source/agent_tech_portfolio/docker-compose.production.yml)
 [![Tests](https://img.shields.io/badge/tests-52%20passed-2ea44f)](06_Tests)

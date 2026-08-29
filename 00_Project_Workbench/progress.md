@@ -221,3 +221,11 @@
 - API 重启后仍可查询 Worker 产生的业务任务，确认共享命名卷和任务持久化有效；第一次查询失败是验证脚本误用了 Celery 消息 ID，已用业务 `task_id` 复核通过。
 - 验证结束仅停止并移除本次专用容器和网络，保留命名卷，未影响其他项目容器；项目 Git 工作区保持干净。
 - 安全记录：密钥仅用于临时验证，未写入项目文件；由于本次诊断输出曾回显密钥值，建议立即在 DeepSeek 控制台轮换该密钥。
+
+## 2026-08-29 - GitHub 项目展示页完善
+
+- 新增根目录中文 README，补齐项目简介、岗位定位、架构图、能力清单、快速启动、配置表、API 表、安全边界、测试结果和文档导航。
+- 新增真实运行截图：项目横幅、FastAPI Swagger 界面、`/ready` 返回、独立验收报告页面及其 PNG 截图，均保存于 `03_Assets\\screenshots`。
+- 新增 `LICENSE`、`CONTRIBUTING.md`、`SECURITY.md`、`CHANGELOG.md` 和 GitHub Actions 测试工作流，使仓库具备基础开源项目结构。
+- GitHub 仓库已设置中文简介和 `aiops`、`multi-agent`、`python`、`deepseek`、`kafka`、`observability`、`sre` Topics。
+- 参考项目仅用于展示结构对照；未复制其代码、图片或虚构数据。
