@@ -213,3 +213,11 @@
 - 真实适配模式验收通过：切换 PostgreSQL、Kafka、Qdrant 后 `/ready` 显示 `postgres`、`KafkaEventBus`，任务写入 PostgreSQL，Kafka 四个业务主题可见，Qdrant `/healthz` 正常。
 - 修复就绪检查将 PostgreSQL 误显示为 SQLite 的问题，并新增回归测试；自动化测试由 51 项增至 52 项，全部通过。
 - 验证结束仅停止并移除 `project024_verify` 容器和网络，保留其命名卷；其他项目容器仍保持运行。
+
+## 2026-08-29 - DeepSeek 密钥独立运行验收
+
+- 使用用户授权的本地 DeepSeek 密钥完成本机真实 API 调用：任务状态 `resolved`，RCA 生成模型解释且无 `llm_error`。
+- 使用独立 Compose 项目 `project024_deepseek` 注入密钥启动 API/Worker，容器 `/ready` 识别 `DeepSeekLLMClient`，HTTP 告警和 Celery 异步任务均成功生成 DeepSeek RCA。
+- API 重启后仍可查询 Worker 产生的业务任务，确认共享命名卷和任务持久化有效；第一次查询失败是验证脚本误用了 Celery 消息 ID，已用业务 `task_id` 复核通过。
+- 验证结束仅停止并移除本次专用容器和网络，保留命名卷，未影响其他项目容器；项目 Git 工作区保持干净。
+- 安全记录：密钥仅用于临时验证，未写入项目文件；由于本次诊断输出曾回显密钥值，建议立即在 DeepSeek 控制台轮换该密钥。
