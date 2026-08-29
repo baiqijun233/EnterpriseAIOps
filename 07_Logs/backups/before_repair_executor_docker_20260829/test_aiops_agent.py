@@ -24,7 +24,6 @@ from common.storage import TaskStore
 from event_bus import InMemoryEventBus, KafkaEventBus
 from fastapi_app import create_app
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient
-from repair_executor import AllowlistRepairExecutor, DryRunRepairExecutor
 from adapters.neo4j_topology import Neo4jTopologyProvider
 from adapters.redis_safety import RedisSafetyGuard
 from adapters.task_queue import CeleryTaskDispatcher, RedisTaskQueue
@@ -35,66 +34,6 @@ from worker_health import check_worker
 
 
 class AIOpsAgentTests(unittest.TestCase):
-    def test_dry_run_executor_never_runs_system_command(self):
-        executor = DryRunRepairExecutor()
-        result = executor.execute("order-service", {"action": "restart"}, "task-1")
-        self.assertTrue(result["success"])
-        self.assertFalse(result["executed"])
-        self.assertEqual(result["mode"], "dry-run")
-
-    def test_allowlist_executor_uses_argument_list_and_rejects_unknown_action(self):
-        calls = []
-
-        class Completed:
-            returncode = 0
-            stdout = "ok"
-            stderr = ""
-
-        def runner(command, **kwargs):
-            calls.append((command, kwargs))
-            return Completed()
-
-        executor = AllowlistRepairExecutor(
-            {"restart": ["tool", "restart", "{service}"]},
-            runner=runner,
-        )
-        result = executor.execute("order-service", {"action": "restart"}, "task-2")
-        self.assertTrue(result["success"])
-        self.assertEqual(calls[0][0], ["tool", "restart", "order-service"])
-        self.assertFalse(calls[0][1]["shell"])
-        with self.assertRaises(ValueError):
-            executor.execute("order-service", {"action": "rm -rf /"}, "task-3")
-
-    def test_approved_proposal_runs_executor_and_records_execution(self):
-        class FakeExecutor(DryRunRepairExecutor):
-            def __init__(self):
-                self.calls = 0
-
-            def execute(self, service, proposal, task_id):
-                self.calls += 1
-                return {"success": True, "executed": True, "mode": "fake", "action": proposal["action"]}
-
-        executor = FakeExecutor()
-        orchestrator = AIOpsOrchestrator(repair_executor=executor)
-        record = orchestrator.handle(Alert("order-service", "cpu", 95, [40, 41, 39, 42, 40]))
-        self.assertEqual(record.status, "resolved")
-        self.assertEqual(record.state["execution"]["mode"], "fake")
-        self.assertEqual(executor.calls, 1)
-        self.assertIn("executed", [event["stage"] for event in record.state["events"]])
-        orchestrator.close()
-
-    def test_execution_failure_enters_execution_failed(self):
-        class FailedExecutor(DryRunRepairExecutor):
-            def execute(self, service, proposal, task_id):
-                raise RuntimeError("模拟执行失败")
-
-        orchestrator = AIOpsOrchestrator(repair_executor=FailedExecutor())
-        record = orchestrator.handle(Alert("order-service", "cpu", 95, [40, 41, 39, 42, 40]))
-        self.assertEqual(record.status, "execution_failed")
-        self.assertFalse(record.state["execution"]["success"])
-        self.assertIn("execution_failed", [event["stage"] for event in record.state["events"]])
-        orchestrator.close()
-
     def test_redis_safety_guard_shares_rate_limit_and_circuit_state(self):
         class FakeRedis:
             def __init__(self):

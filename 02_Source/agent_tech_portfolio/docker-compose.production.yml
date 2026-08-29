@@ -1,4 +1,65 @@
 services:
+  api:
+    build:
+      context: ../..
+      dockerfile: 02_Source/agent_tech_portfolio/Dockerfile
+    environment:
+      AIOPS_DATA_DIR: /app/data
+      AIOPS_CELERY_BROKER: redis://redis:6379/0
+      AIOPS_EVENT_BUS: ${AIOPS_EVENT_BUS:-memory}
+      AIOPS_TOPOLOGY: ${AIOPS_TOPOLOGY:-json}
+      AIOPS_SAFETY_BACKEND: ${AIOPS_SAFETY_BACKEND:-memory}
+      AIOPS_SAFETY_REDIS_URL: redis://redis:6379/1
+      AIOPS_SAFETY_KEY_PREFIX: ${AIOPS_SAFETY_KEY_PREFIX:-project024:aiops:safety}
+      AIOPS_LLM: ${AIOPS_LLM:-auto}
+      AIOPS_DEEPSEEK_API_KEY: ${AIOPS_DEEPSEEK_API_KEY:-}
+      AIOPS_DEEPSEEK_MODEL: ${AIOPS_DEEPSEEK_MODEL:-deepseek-chat}
+      AIOPS_DEEPSEEK_ENDPOINT: ${AIOPS_DEEPSEEK_ENDPOINT:-https://api.deepseek.com/chat/completions}
+      AIOPS_REPAIR_EXECUTOR: ${AIOPS_REPAIR_EXECUTOR:-dry-run}
+      AIOPS_REPAIR_COMMANDS: ${AIOPS_REPAIR_COMMANDS:-}
+      AIOPS_REPAIR_TIMEOUT: ${AIOPS_REPAIR_TIMEOUT:-30}
+    ports:
+      - "${AIOPS_API_PORT:-18024}:8000"
+    volumes:
+      - aiops_app_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    build:
+      context: ../..
+      dockerfile: 02_Source/agent_tech_portfolio/Dockerfile
+    command: ["celery", "-A", "celery_app:celery_app", "worker", "--pool=solo", "--concurrency=1", "--loglevel=INFO"]
+    environment:
+      AIOPS_DATA_DIR: /app/data
+      AIOPS_CELERY_BROKER: redis://redis:6379/0
+      AIOPS_EVENT_BUS: ${AIOPS_EVENT_BUS:-memory}
+      AIOPS_TOPOLOGY: ${AIOPS_TOPOLOGY:-json}
+      AIOPS_SAFETY_BACKEND: ${AIOPS_SAFETY_BACKEND:-memory}
+      AIOPS_LLM: ${AIOPS_LLM:-auto}
+      AIOPS_DEEPSEEK_API_KEY: ${AIOPS_DEEPSEEK_API_KEY:-}
+      AIOPS_DEEPSEEK_MODEL: ${AIOPS_DEEPSEEK_MODEL:-deepseek-chat}
+      AIOPS_DEEPSEEK_ENDPOINT: ${AIOPS_DEEPSEEK_ENDPOINT:-https://api.deepseek.com/chat/completions}
+      AIOPS_REPAIR_EXECUTOR: ${AIOPS_REPAIR_EXECUTOR:-dry-run}
+      AIOPS_REPAIR_COMMANDS: ${AIOPS_REPAIR_COMMANDS:-}
+      AIOPS_REPAIR_TIMEOUT: ${AIOPS_REPAIR_TIMEOUT:-30}
+    volumes:
+      - aiops_app_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-m", "worker_health"]
+      interval: 15s
+      timeout: 8s
+      retries: 5
+
   kafka:
     image: confluentinc/cp-kafka:7.7.0
     hostname: kafka
@@ -24,9 +85,14 @@ services:
   redis:
     image: redis:7.4-alpine
     ports:
-      - "6379:6379"
+      - "${AIOPS_REDIS_PORT:-6380}:6379"
     volumes:
       - aiops_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   neo4j:
     image: neo4j:5.26-community
@@ -39,6 +105,7 @@ services:
       - aiops_neo4j_data:/data
 
 volumes:
+  aiops_app_data:
   aiops_kafka_data:
   aiops_redis_data:
   aiops_neo4j_data:

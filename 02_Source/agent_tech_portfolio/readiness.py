@@ -73,9 +73,13 @@ class ReadinessChecker:
                     getattr(getattr(self.orchestrator, "heal", None), "safety_guard", None)
                 ),
             ),
+            "repair_executor": self._probe_required(
+                getattr(self.orchestrator, "repair_executor", None),
+                mode=self._component_name(getattr(self.orchestrator, "repair_executor", None)),
+            ),
             "llm": self._check_llm(),
         }
-        required_names = ("storage", "event_bus", "topology", "safety_state")
+        required_names = ("storage", "event_bus", "topology", "safety_state", "repair_executor")
         is_ready = all(checks[name]["status"] == "ready" for name in required_names)
         return {
             "status": "ready" if is_ready else "not_ready",

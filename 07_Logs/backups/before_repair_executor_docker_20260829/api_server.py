@@ -15,15 +15,13 @@ from auth import AuthManager, AuthenticationError, AuthorizationError, AuthPrinc
 from event_bus import create_event_bus
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient, OpenAICompatibleLLMClient
 from metrics import MetricsRegistry
-from repair_executor import AllowlistRepairExecutor, DryRunRepairExecutor
 from readiness import ReadinessChecker
 from common.storage import TaskStore, record_to_dict
 from adapters.neo4j_topology import Neo4jTopologyProvider
 
 
 def build_orchestrator() -> AIOpsOrchestrator:
-    configured_data_path = os.getenv("AIOPS_DATA_DIR", "").strip()
-    data_path = Path(configured_data_path) if configured_data_path else Path(__file__).resolve().parents[2] / "04_Data"
+    data_path = Path(__file__).resolve().parents[2] / "04_Data"
     topology_path = data_path / "topology.json"
     topology_mode = os.getenv("AIOPS_TOPOLOGY", "json").strip().lower()
     if topology_mode == "neo4j":
@@ -82,30 +80,12 @@ def build_orchestrator() -> AIOpsOrchestrator:
         safety_guard = None
     else:
         raise ValueError("AIOPS_SAFETY_BACKEND 只能是 memory 或 redis")
-    executor_mode = os.getenv("AIOPS_REPAIR_EXECUTOR", "dry-run").strip().lower()
-    if executor_mode in {"dry-run", "dry_run", "none"}:
-        repair_executor = DryRunRepairExecutor()
-    elif executor_mode == "allowlist":
-        raw_commands = os.getenv("AIOPS_REPAIR_COMMANDS", "").strip()
-        if not raw_commands:
-            raise ValueError("AIOPS_REPAIR_COMMANDS 未配置，无法启用 allowlist 执行器")
-        try:
-            commands = json.loads(raw_commands)
-        except json.JSONDecodeError as exc:
-            raise ValueError("AIOPS_REPAIR_COMMANDS 必须是 JSON 对象") from exc
-        repair_executor = AllowlistRepairExecutor(
-            commands,
-            timeout=float(os.getenv("AIOPS_REPAIR_TIMEOUT", "30")),
-        )
-    else:
-        raise ValueError("AIOPS_REPAIR_EXECUTOR 只能是 dry-run 或 allowlist")
     return AIOpsOrchestrator(
         store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
         topology=topology,
         event_bus=event_bus,
         llm_client=llm_client,
         safety_guard=safety_guard,
-        repair_executor=repair_executor,
     )
 
 

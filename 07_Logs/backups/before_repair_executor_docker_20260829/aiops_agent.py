@@ -14,7 +14,6 @@ from typing import Any, Callable
 
 from event_bus import EventBus, InMemoryEventBus
 from llm_adapter import LLMClient
-from repair_executor import DryRunRepairExecutor, RepairExecutor
 from common.storage import TaskRecord, TaskStore, utc_now
 
 
@@ -330,7 +329,6 @@ class AIOpsOrchestrator:
         event_bus: EventBus | None = None,
         llm_client: LLMClient | None = None,
         safety_guard: SafetyGuard | None = None,
-        repair_executor: RepairExecutor | None = None,
     ) -> None:
         if not isinstance(max_retries, int) or isinstance(max_retries, bool) or not 0 <= max_retries <= 5:
             raise ValueError("max_retries 必须是 0 到 5 的整数")
@@ -344,7 +342,6 @@ class AIOpsOrchestrator:
         self.change = ChangeAgent()
         self.max_retries = max_retries
         self.event_bus = event_bus or InMemoryEventBus()
-        self.repair_executor = repair_executor or DryRunRepairExecutor()
         self._approval_lock = threading.RLock()
 
     def handle(self, alert: Alert) -> TaskRecord:
@@ -368,16 +365,8 @@ class AIOpsOrchestrator:
             approval = self._run_stage(
                 "change", lambda: self.change.approve(proposal), state, record
             )
-            state["proposal"] = proposal
-            state["approval"] = approval
-            state["result"] = {
-                "resolved": False,
-                "action": proposal["action"],
-                "approval": approval,
-            }
-            if not approval["approved"]:
-                return self._finish(record, "awaiting_approval", state)
-            return self._execute_approved(record, state, proposal, approval, expected_status="running")
+            state["result"] = {"resolved": approval["approved"], "action": proposal["action"], "approval": approval}
+            return self._finish(record, "resolved" if approval["approved"] else "awaiting_approval", state)
         except Exception as exc:
             state["error"] = str(exc)
             return self._finish(record, "failed", state)
@@ -418,31 +407,16 @@ class AIOpsOrchestrator:
                 "stage": "approval_resume",
                 "result": {"approved": approved, "actor": safe_actor},
             })
-            state.setdefault("result", {})["resolved"] = False
-            if not approved:
-                finished = TaskRecord(record.task_id, record.task_type, "rejected", state, utc_now())
-                if not self.store.save_if_status(finished, "awaiting_approval"):
-                    raise ValueError("任务已被其他实例处理或状态已变化")
-                self._publish_event("aiops.events", {
-                    "task_id": task_id,
-                    "stage": "approval_resume",
-                    "result": {"approved": False, "actor": safe_actor},
-                }, state)
-                return finished
-            proposal = state.get("proposal")
-            approval = state.get("approval")
-            if not isinstance(proposal, dict) or not isinstance(approval, dict):
-                raise ValueError("任务缺少可执行的修复方案")
-            state["approval"]["approved"] = True
-            executing = TaskRecord(record.task_id, record.task_type, "executing", state, utc_now())
-            if not self.store.save_if_status(executing, "awaiting_approval"):
+            state.setdefault("result", {})["resolved"] = approved
+            finished = TaskRecord(
+                record.task_id,
+                record.task_type,
+                "resolved" if approved else "rejected",
+                state,
+                utc_now(),
+            )
+            if not self.store.save_if_status(finished, "awaiting_approval"):
                 raise ValueError("任务已被其他实例处理或状态已变化")
-            finished = self._execute_approved(executing, state, proposal, approval, expected_status="executing")
-            state["events"].append({
-                "stage": "approval_resume",
-                "result": {"approved": True, "actor": safe_actor},
-            })
-            self.store.save(finished)
             return finished
 
     def _run_stage(self, name: str, action: Any, state: dict[str, Any], record: TaskRecord) -> Any:
@@ -503,54 +477,8 @@ class AIOpsOrchestrator:
         self.event_bus.close()
         self.store.close()
         self.heal.safety_guard.close()
-        self.repair_executor.close()
         if hasattr(self.rca.topology, "close"):
             self.rca.topology.close()
-
-    def _execute_approved(
-        self,
-        record: TaskRecord,
-        state: dict[str, Any],
-        proposal: dict[str, Any],
-        approval: dict[str, Any],
-        expected_status: str,
-    ) -> TaskRecord:
-        """审批通过后执行一次修复；执行结果写入检查点并保持幂等。"""
-        if state.get("execution", {}).get("success") is True:
-            return self._finish(record, "resolved", state)
-        if record.status != "executing":
-            executing = TaskRecord(record.task_id, record.task_type, "executing", state, utc_now())
-            if expected_status == "running":
-                self.store.save(executing)
-            elif not self.store.save_if_status(executing, expected_status):
-                raise ValueError("任务已被其他实例处理或状态已变化")
-            record = executing
-        service = str(state.get("alert", {}).get("service", "")).strip()
-        try:
-            execution = self.repair_executor.execute(service, proposal, record.task_id)
-            if not isinstance(execution, dict) or execution.get("success") is not True:
-                raise RuntimeError("修复执行器返回失败结果")
-            execution.setdefault("audit_id", approval.get("audit_id"))
-            state["execution"] = execution
-            state["result"]["resolved"] = True
-            state["events"].append({"stage": "executed", "result": execution})
-            self._publish_event("aiops.events", {
-                "task_id": record.task_id,
-                "stage": "executed",
-                "result": execution,
-            }, state)
-            self.heal.safety_guard.record_success(service)
-            return self._finish(record, "resolved", state)
-        except Exception as exc:
-            state["execution"] = {"success": False, "error": str(exc), "action": proposal.get("action")}
-            state["events"].append({"stage": "execution_failed", "error": str(exc)})
-            self._publish_event("aiops.events", {
-                "task_id": record.task_id,
-                "stage": "execution_failed",
-                "error": str(exc),
-            }, state)
-            self.heal.safety_guard.record_failure(service)
-            return self._finish(record, "execution_failed", state)
 
     def _finish(self, record: TaskRecord, status: str, state: dict[str, Any]) -> TaskRecord:
         finished = TaskRecord(record.task_id, record.task_type, status, state, utc_now())

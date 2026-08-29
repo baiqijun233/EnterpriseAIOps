@@ -138,10 +138,6 @@ python -m api_server
 
 Kafka 发送失败不会让主流程直接崩溃，错误会记录在任务的 `event_bus_errors` 字段，便于降级和排查。
 
-真实修复执行器默认关闭。`AIOPS_REPAIR_EXECUTOR=dry-run` 只记录意图；显式设置 `allowlist` 后，通过 `AIOPS_REPAIR_COMMANDS` 配置 `restart`/`rollback` 参数列表，执行阶段会记录 `executing`、`resolved` 或 `execution_failed`，并在失败时触发熔断。命令始终以参数列表运行，不经过 shell。
-
-项目提供 `Dockerfile` 和生产 Compose 中的 `api`、`worker` 服务。Compose 构建上下文为项目根目录，API 使用 FastAPI，Worker 使用 Celery `solo` 池，SQLite 数据保存在 `aiops_app_data` 命名卷。默认事件总线、拓扑和修复执行器仍为离线安全模式。
-
 自动修复安全护栏按以下顺序执行：单服务滑动窗口限流 → dry-run 预演检查 → 爆炸半径检查 → 单服务熔断检查 → 变更审批。默认每个服务 60 秒最多 5 次自动修复建议，爆炸半径不超过 20%；被护栏拦截的任务会进入 `awaiting_approval`，不会被当成已执行修复。
 
 熔断器提供 `record_failure(service)` 和 `record_success(service)`，供真实修复执行器回写结果。当前项目只输出 dry-run 建议，不会伪造真实变更成功或失败。
