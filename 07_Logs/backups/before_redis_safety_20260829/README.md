@@ -102,14 +102,6 @@ $env:AIOPS_CELERY_BROKER = "redis://localhost:6379/0"
 
 Windows 本地验证建议使用 `--pool=solo`；停止 Worker 在终端按 `Ctrl+C` 即可。Worker 只消费已注册任务，未知任务会被记录为失败，不会自动执行任意代码。
 
-检查 Worker 是否真正注册了本项目的 `aiops.handle_incident` 任务：
-
-```powershell
-& ".\02_Source\agent_tech_portfolio\check_worker.ps1"
-```
-
-就绪时退出码为 0，未就绪为 1。该检查会过滤同一 Broker 上其他项目的 Worker，不会因为“任意 Worker 能 ping 通”就误报成功。
-
 提交一条真实 AIOps 异步任务（需要 Worker 正在运行）：
 
 ```powershell
@@ -141,14 +133,3 @@ Kafka 发送失败不会让主流程直接崩溃，错误会记录在任务的 `
 自动修复安全护栏按以下顺序执行：单服务滑动窗口限流 → dry-run 预演检查 → 爆炸半径检查 → 单服务熔断检查 → 变更审批。默认每个服务 60 秒最多 5 次自动修复建议，爆炸半径不超过 20%；被护栏拦截的任务会进入 `awaiting_approval`，不会被当成已执行修复。
 
 熔断器提供 `record_failure(service)` 和 `record_success(service)`，供真实修复执行器回写结果。当前项目只输出 dry-run 建议，不会伪造真实变更成功或失败。
-
-默认 `AIOPS_SAFETY_BACKEND=memory`，适合单进程离线演示。多 API 实例可改为 Redis 共享状态：
-
-```powershell
-$env:AIOPS_SAFETY_BACKEND = "redis"
-$env:AIOPS_SAFETY_REDIS_URL = "redis://localhost:6379/0"
-$env:AIOPS_SAFETY_KEY_PREFIX = "project024:aiops:safety"
-& ".\02_Source\agent_tech_portfolio\start_api.ps1"
-```
-
-Redis 后端使用 Lua 将限流和熔断的“检查+更新”合并为单次原子操作，默认 Key 位于 `project024:aiops:safety:*` 命名空间，可通过 `AIOPS_SAFETY_KEY_PREFIX` 调整。`/ready` 会对该 Redis 执行 `PING`；Redis 不可用时 API 返回 503 就绪失败。

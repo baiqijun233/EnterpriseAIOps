@@ -63,12 +63,6 @@ class RedisTaskQueue:
         if self._client is not None and hasattr(self._client, "close"):
             self._client.close()
 
-    def health_check(self, timeout: float = 2.0) -> None:
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout 必须是正数")
-        if self._get_client().ping() is not True:
-            raise RuntimeError("Redis PING 未返回成功")
-
 
 class CeleryTaskDispatcher:
     def __init__(self, broker_url: str, app_factory: Callable[..., Any] | None = None) -> None:

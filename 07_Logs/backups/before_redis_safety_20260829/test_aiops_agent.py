@@ -25,112 +25,13 @@ from event_bus import InMemoryEventBus, KafkaEventBus
 from fastapi_app import create_app
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient
 from adapters.neo4j_topology import Neo4jTopologyProvider
-from adapters.redis_safety import RedisSafetyGuard
 from adapters.task_queue import CeleryTaskDispatcher, RedisTaskQueue
 from auth import AuthManager, AuthenticationError, AuthorizationError
 from metrics import MetricsRegistry
 from readiness import ReadinessChecker
-from worker_health import check_worker
 
 
 class AIOpsAgentTests(unittest.TestCase):
-    def test_redis_safety_guard_shares_rate_limit_and_circuit_state(self):
-        class FakeRedis:
-            def __init__(self):
-                self.rate_counts = {}
-                self.breakers = {}
-                self.closed = 0
-
-            def eval(self, script, key_count, key, *args):
-                if "AIOPS_RATE_LIMIT" in script:
-                    max_actions = int(args[1])
-                    count = self.rate_counts.get(key, 0)
-                    if count >= max_actions:
-                        return 0
-                    self.rate_counts[key] = count + 1
-                    return 1
-                state = self.breakers.setdefault(
-                    key,
-                    {"state": "closed", "failure_count": 0, "opened_at": 0},
-                )
-                if "AIOPS_CIRCUIT_ALLOW" in script:
-                    return [0 if state["state"] == "open" else 1, state["state"], state["failure_count"]]
-                if "AIOPS_CIRCUIT_FAILURE" in script:
-                    threshold = int(args[0])
-                    state["failure_count"] += 1
-                    if state["failure_count"] >= threshold:
-                        state["state"] = "open"
-                    return [state["state"], state["failure_count"]]
-                raise AssertionError("未知 Lua 脚本")
-
-            def hgetall(self, key):
-                return self.breakers.get(key, {})
-
-            def delete(self, key):
-                self.breakers.pop(key, None)
-
-            def ping(self):
-                return True
-
-            def close(self):
-                self.closed += 1
-
-        redis_client = FakeRedis()
-        factory = lambda url: redis_client
-        first = RedisSafetyGuard(
-            "redis://localhost:6379/0",
-            max_actions=1,
-            failure_threshold=1,
-            client_factory=factory,
-        )
-        second = RedisSafetyGuard(
-            "redis://localhost:6379/0",
-            max_actions=1,
-            failure_threshold=1,
-            client_factory=factory,
-        )
-        proposal = {"dry_run": True, "blast_radius": 0.1}
-        self.assertTrue(first.evaluate("order-service", proposal)["allowed"])
-        limited = second.evaluate("order-service", proposal)
-        self.assertEqual(limited["failed_check"], "rate_limit")
-
-        first.record_failure("payment-service")
-        circuit_blocked = second.evaluate("payment-service", proposal)
-        self.assertEqual(circuit_blocked["failed_check"], "circuit_breaker")
-        second.health_check()
-        first.close()
-        second.close()
-        self.assertGreaterEqual(redis_client.closed, 1)
-
-    def test_celery_worker_health_requires_registered_aiops_task(self):
-        class FakeInspector:
-            def __init__(self, registrations):
-                self.registrations = registrations
-
-            def registered(self):
-                return self.registrations
-
-        class FakeControl:
-            def __init__(self, registrations):
-                self.registrations = registrations
-
-            def inspect(self, timeout):
-                self.timeout = timeout
-                return FakeInspector(self.registrations)
-
-        class FakeApp:
-            def __init__(self, registrations):
-                self.control = FakeControl(registrations)
-
-        ready = check_worker(
-            FakeApp({"worker@test": ["aiops.handle_incident", "aiops.echo"]}),
-            timeout=0.5,
-        )
-        self.assertEqual(ready["status"], "ready")
-        self.assertEqual(ready["workers"], ["worker@test"])
-        unavailable = check_worker(FakeApp({"other@worker": ["other.task"]}), timeout=0.5)
-        self.assertEqual(unavailable["status"], "not_ready")
-
     def test_readiness_checker_reports_local_dependencies(self):
         orchestrator = AIOpsOrchestrator()
         current_time = [100.0]
@@ -144,7 +45,6 @@ class AIOpsAgentTests(unittest.TestCase):
         self.assertEqual(result["checks"]["storage"]["status"], "ready")
         self.assertEqual(result["checks"]["event_bus"]["status"], "ready")
         self.assertEqual(result["checks"]["topology"]["status"], "ready")
-        self.assertEqual(result["checks"]["safety_state"]["status"], "ready")
         self.assertEqual(result["checks"]["llm"]["status"], "disabled")
         orchestrator.store.close()
         self.assertEqual(checker.check()["status"], "ready")
@@ -835,14 +735,10 @@ class AIOpsAgentTests(unittest.TestCase):
             def close(self):
                 return
 
-            def ping(self):
-                return True
-
         redis_client = FakeRedis()
         queue = RedisTaskQueue(client_factory=lambda url: redis_client)
         queue.enqueue("aiops", {"task_id": "t-3"})
         self.assertEqual(queue.dequeue("aiops")["task_id"], "t-3")
-        queue.health_check()
 
         class FakeResult:
             id = "celery-1"

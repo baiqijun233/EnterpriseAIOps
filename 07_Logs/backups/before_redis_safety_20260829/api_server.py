@@ -66,26 +66,11 @@ def build_orchestrator() -> AIOpsOrchestrator:
         llm_client = None
     else:
         raise ValueError("AIOPS_LLM 只能是 auto、none、deterministic、deepseek 或 openai")
-    safety_backend = os.getenv("AIOPS_SAFETY_BACKEND", "memory").strip().lower()
-    if safety_backend == "redis":
-        from adapters.redis_safety import RedisSafetyGuard
-
-        safety_guard = RedisSafetyGuard(
-            os.getenv("AIOPS_SAFETY_REDIS_URL", "redis://localhost:6379/0"),
-            key_prefix=os.getenv(
-                "AIOPS_SAFETY_KEY_PREFIX", "project024:aiops:safety"
-            ),
-        )
-    elif safety_backend == "memory":
-        safety_guard = None
-    else:
-        raise ValueError("AIOPS_SAFETY_BACKEND 只能是 memory 或 redis")
     return AIOpsOrchestrator(
         store=TaskStore(database_path=data_path / "aiops_tasks.sqlite3"),
         topology=topology,
         event_bus=event_bus,
         llm_client=llm_client,
-        safety_guard=safety_guard,
     )
 
 

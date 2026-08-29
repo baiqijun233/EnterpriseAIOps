@@ -277,13 +277,6 @@ class SafetyGuard:
     def record_success(self, service: str) -> None:
         self.circuit_breaker.record_success(service)
 
-    def health_check(self, timeout: float = 2.0) -> None:
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout 必须是正数")
-
-    def close(self) -> None:
-        return
-
 
 class HealAgent:
     def __init__(self, safety_guard: SafetyGuard | None = None, fleet_size: int = 20) -> None:
@@ -476,7 +469,6 @@ class AIOpsOrchestrator:
     def close(self) -> None:
         self.event_bus.close()
         self.store.close()
-        self.heal.safety_guard.close()
         if hasattr(self.rca.topology, "close"):
             self.rca.topology.close()
 

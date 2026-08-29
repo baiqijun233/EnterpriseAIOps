@@ -67,15 +67,9 @@ class ReadinessChecker:
                 mode=self._component_name(getattr(self.orchestrator, "event_bus", None)),
             ),
             "topology": self._check_topology(),
-            "safety_state": self._probe_required(
-                getattr(getattr(self.orchestrator, "heal", None), "safety_guard", None),
-                mode=self._component_name(
-                    getattr(getattr(self.orchestrator, "heal", None), "safety_guard", None)
-                ),
-            ),
             "llm": self._check_llm(),
         }
-        required_names = ("storage", "event_bus", "topology", "safety_state")
+        required_names = ("storage", "event_bus", "topology")
         is_ready = all(checks[name]["status"] == "ready" for name in required_names)
         return {
             "status": "ready" if is_ready else "not_ready",

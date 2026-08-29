@@ -51,7 +51,7 @@ def create_app(
 
     app = FastAPI(
         title="Enterprise Multi-Agent AIOps",
-        version="1.2.0",
+        version="1.3.0",
         description="企业级多 Agent 智能运维系统 API",
         lifespan=lifespan,
     )
