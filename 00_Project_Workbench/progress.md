@@ -162,4 +162,4 @@
 - 审批恢复先用 SQLite 条件更新占用任务，避免多实例重复执行；成功任务有幂等保护。
 - 新增项目 `Dockerfile`，Compose 增加 FastAPI `api`、Celery `worker`、Redis 健康检查和 `aiops_app_data` 命名卷。
 - 新增 4 项执行器与执行状态测试，当前自动化测试共 42 项全部通过；编译检查、Compose 配置校验通过。
-- 已完成 API/Worker 镜像构建；启动验证时发现宿主机 `8000`、`8001` 被其他服务占用，Compose 已改为默认宿主机 `18024`，Redis 改为默认 `6380`，避免影响其他项目。API/Worker 容器端到端启动继续使用专用端口验证。
+- 已完成 API/Worker 镜像构建；启动验证时发现宿主机 `8000`、`8001` 被其他服务占用，Compose 已改为默认宿主机 `18024`，Redis 改为默认 `6380`，避免影响其他项目。已在专用端口完成 API `/health`、`/ready`、Worker 就绪、HTTP 告警和 Celery 异步任务验证；验证后停止本项目容器并保留命名卷。
