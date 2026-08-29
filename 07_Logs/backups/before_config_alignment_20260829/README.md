@@ -74,7 +74,7 @@ Kafka 模式（需要已运行的 Kafka broker）：
 ```powershell
 python -m pip install -r 02_Source\agent_tech_portfolio\requirements-kafka.txt
 $env:AIOPS_EVENT_BUS = "kafka"
-$env:AIOPS_KAFKA_BOOTSTRAP = "localhost:29092"
+$env:AIOPS_KAFKA_BOOTSTRAP = "localhost:9092"
 $env:PYTHONPATH = "02_Source\agent_tech_portfolio"
 python -m api_server
 ```
@@ -87,7 +87,7 @@ python -m api_server
 python -m pip install -r 02_Source\agent_tech_portfolio\requirements-production.txt
 ```
 
-生产 Compose 还提供 PostgreSQL 和 Qdrant。默认仍使用 SQLite、内存事件总线和本地 RAG；上线前只需设置 `AIOPS_STORAGE=postgres`、`AIOPS_EVENT_BUS=kafka`、`AIOPS_RAG=qdrant` 及对应地址。容器内部地址分别为 `postgres:5432`、`kafka:9092`、`qdrant:6333`，宿主机默认映射为 PostgreSQL `15433`、Kafka `29092`、Qdrant `16333`，均可通过 `AIOPS_POSTGRES_PORT`、`AIOPS_KAFKA_PORT`、`AIOPS_QDRANT_PORT` 调整。
+生产 Compose 还提供 PostgreSQL 和 Qdrant。默认仍使用 SQLite、内存事件总线和本地 RAG；上线前只需设置 `AIOPS_STORAGE=postgres`、`AIOPS_EVENT_BUS=kafka`、`AIOPS_RAG=qdrant` 及对应地址。容器内部地址分别为 `postgres:5432`、`kafka:9092`、`qdrant:6333`，宿主机映射为 PostgreSQL `5433`、Kafka `29092`、Qdrant `6333`。
 
 Prometheus 可抓取 `GET /metrics`，无需额外修改核心流程。
 

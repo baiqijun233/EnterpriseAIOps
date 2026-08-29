@@ -133,5 +133,83 @@ class TaskStore:
                 self._closed = True
 
 
+class PostgresTaskStore:
+    """PostgreSQL 任务存储；仅在 AIOPS_STORAGE=postgres 时加载驱动。"""
+
+    def __init__(self, database_url: str) -> None:
+        if not isinstance(database_url, str) or not database_url.startswith(("postgresql://", "postgres://")):
+            raise ValueError("database_url 必须是 PostgreSQL 地址")
+        try:
+            import psycopg
+        except ImportError as exc:
+            raise RuntimeError("PostgreSQL 模式需要安装 psycopg[binary]") from exc
+        self.database_path = database_url
+        self._connection = psycopg.connect(database_url, autocommit=True)
+        self._closed = False
+        with self._connection.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tasks (
+                    task_id TEXT PRIMARY KEY,
+                    task_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    state_json JSONB NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+
+    def save(self, record: TaskRecord) -> None:
+        _validate_record(record)
+        with self._connection.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO tasks(task_id, task_type, status, state_json, updated_at)
+                VALUES(%s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT(task_id) DO UPDATE SET task_type=EXCLUDED.task_type,
+                status=EXCLUDED.status, state_json=EXCLUDED.state_json, updated_at=EXCLUDED.updated_at
+            """, (record.task_id, record.task_type, record.status, json.dumps(record.state, ensure_ascii=False), record.updated_at))
+
+    def get(self, task_id: str) -> TaskRecord | None:
+        if not task_id:
+            return None
+        with self._connection.cursor() as cursor:
+            cursor.execute("SELECT task_id, task_type, status, state_json, updated_at FROM tasks WHERE task_id=%s", (task_id,))
+            row = cursor.fetchone()
+        return TaskRecord(row[0], row[1], row[2], row[3] if isinstance(row[3], dict) else json.loads(row[3]), row[4]) if row else None
+
+    def save_if_status(self, record: TaskRecord, expected_status: str) -> bool:
+        _validate_record(record)
+        if not expected_status:
+            raise ValueError("expected_status 不能为空")
+        with self._connection.cursor() as cursor:
+            cursor.execute("UPDATE tasks SET task_type=%s,status=%s,state_json=%s::jsonb,updated_at=%s WHERE task_id=%s AND status=%s", (record.task_type, record.status, json.dumps(record.state, ensure_ascii=False), record.updated_at, record.task_id, expected_status))
+            return cursor.rowcount == 1
+
+    def list_recent(self, limit: int = 50) -> list[TaskRecord]:
+        if not isinstance(limit, int) or isinstance(limit, bool):
+            raise ValueError("limit 必须是整数")
+        limit = max(1, min(limit, 200))
+        with self._connection.cursor() as cursor:
+            cursor.execute("SELECT task_id, task_type, status, state_json, updated_at FROM tasks ORDER BY updated_at DESC LIMIT %s", (limit,))
+            rows = cursor.fetchall()
+        return [TaskRecord(row[0], row[1], row[2], row[3] if isinstance(row[3], dict) else json.loads(row[3]), row[4]) for row in rows]
+
+    def health_check(self, timeout: float = 2.0) -> None:
+        if timeout <= 0:
+            raise ValueError("timeout 必须是正数")
+        with self._connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            if cursor.fetchone()[0] != 1:
+                raise RuntimeError("PostgreSQL 就绪检查失败")
+
+    def close(self) -> None:
+        if not self._closed:
+            self._connection.close()
+            self._closed = True
+
+
+def _validate_record(record: TaskRecord) -> None:
+    if not record.task_id or not record.task_type or not record.status:
+        raise ValueError("task_id、task_type 和 status 不能为空")
+
+
 def record_to_dict(record: TaskRecord) -> dict[str, Any]:
     return asdict(record)

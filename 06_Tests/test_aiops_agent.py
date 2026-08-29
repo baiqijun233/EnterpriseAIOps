@@ -21,13 +21,13 @@ from aiops_agent import (
     SlidingWindowRateLimiter,
 )
 from api_server import create_server
-from common.storage import TaskStore
+from common.storage import PostgresTaskStore, TaskStore
 from event_bus import InMemoryEventBus, KafkaEventBus
 from fastapi_app import create_app
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient
 from repair_executor import AllowlistRepairExecutor, DryRunRepairExecutor
 from cmdb import JsonCMDB
-from rag import Document, HttpVectorStore, InMemoryVectorStore, RAGService
+from rag import Document, HttpVectorStore, InMemoryVectorStore, QdrantVectorStore, RAGService
 from observability import Observability
 from adapters.neo4j_topology import Neo4jTopologyProvider
 from adapters.redis_safety import RedisSafetyGuard
@@ -71,6 +71,21 @@ class AIOpsAgentTests(unittest.TestCase):
         with patch("rag.urlopen", lambda request, timeout: FakeResponse()):
             docs = HttpVectorStore("http://vector-db").search("rollback")
         self.assertEqual(docs[0].document_id, "d1")
+
+    def test_qdrant_vector_store_parses_payload(self):
+        class FakeResponse:
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self): return b'{"result":[{"id":"d2","payload":{"text":"restart payment","metadata":{"action":"restart"}}}]}'
+
+        with patch("rag.urlopen", lambda request, timeout: FakeResponse()):
+            docs = QdrantVectorStore("http://qdrant").search("restart")
+        self.assertEqual(docs[0].document_id, "d2")
+        self.assertEqual(docs[0].metadata["action"], "restart")
+
+    def test_postgres_store_validates_database_url_before_driver_load(self):
+        with self.assertRaises(ValueError):
+            PostgresTaskStore("sqlite:///not-postgres")
     def test_isolation_forest_detector_flags_obvious_outlier(self):
         detector = IsolationForestDetector(n_estimators=15, seed=11)
         self.assertTrue(detector.detect(Alert("order-service", "cpu", 95, [40, 41, 39, 42, 40])))

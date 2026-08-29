@@ -16,12 +16,16 @@ COPY 02_Source/agent_tech_portfolio/requirements-production.txt /tmp/requirement
 RUN pip install --no-cache-dir -r /tmp/requirements-fastapi.txt -r /tmp/requirements-production.txt
 
 COPY 02_Source/agent_tech_portfolio /app/source
-COPY 04_Data /app/data
+COPY 04_Data /app/default_data
+COPY 02_Source/agent_tech_portfolio/container_entrypoint.sh /usr/local/bin/aiops-entrypoint
+RUN chmod +x /usr/local/bin/aiops-entrypoint
 
 RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /app/data \
     && chown -R appuser:appuser /app
 USER appuser
+
+ENTRYPOINT ["/usr/local/bin/aiops-entrypoint"]
 
 EXPOSE 8000
 

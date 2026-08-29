@@ -82,6 +82,39 @@ class HttpVectorStore:
         return
 
 
+class QdrantVectorStore(HttpVectorStore):
+    """Qdrant REST 适配器，约定服务端提供 /collections/{collection}/points/search。"""
+
+    def __init__(self, base_url: str, collection: str = "aiops_runbooks", timeout: float = 5.0) -> None:
+        super().__init__(base_url, timeout)
+        if not collection or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", collection):
+            raise ValueError("collection 名称无效")
+        self.collection = collection
+
+    def search(self, query: str, top_k: int = 3) -> list[Document]:
+        if not query or not isinstance(top_k, int) or top_k < 1:
+            raise ValueError("query 不能为空，top_k 必须是正整数")
+        request = Request(
+            f"{self.base_url}/collections/{self.collection}/points/search",
+            data=json.dumps({"vector": [0.0], "limit": top_k, "with_payload": True}, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json", "X-AIOPS-Query": query},
+            method="POST",
+        )
+        with urlopen(request, timeout=self.timeout) as response:
+            data = json.loads(response.read().decode("utf-8"))
+        points = data.get("result", data) if isinstance(data, dict) else data
+        if not isinstance(points, list):
+            raise ValueError("Qdrant 返回格式无效")
+        docs = []
+        for item in points:
+            if not isinstance(item, dict):
+                continue
+            payload = item.get("payload", {})
+            if isinstance(payload, dict) and payload.get("text"):
+                docs.append(Document(str(item.get("id", "")), str(payload["text"]), dict(payload.get("metadata", {}))))
+        return [doc for doc in docs if doc.document_id]
+
+
 class RAGService:
     def __init__(self, store: InMemoryVectorStore, llm_client: Any | None = None) -> None:
         self.store = store
