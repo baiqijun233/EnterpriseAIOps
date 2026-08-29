@@ -127,6 +127,15 @@ $env:AIOPS_DEEPSEEK_MODEL = 'deepseek-chat'
 
 也可以保持 `AIOPS_LLM=auto`。检测到 `AIOPS_DEEPSEEK_API_KEY` 时会自动优先使用 DeepSeek，没有密钥则离线运行。
 
+## 容器镜像
+
+GHCR 镜像已通过 `v0.1.0` 工作流真实发布：
+
+```powershell
+docker pull ghcr.io/baiqijun233/enterpriseaiops:0.1.0
+docker pull ghcr.io/baiqijun233/enterpriseaiops:latest
+```
+
 ## 🔌 常用接口
 
 | 方法 | 路径 | 作用 |
