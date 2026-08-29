@@ -28,47 +28,9 @@ from adapters.neo4j_topology import Neo4jTopologyProvider
 from adapters.task_queue import CeleryTaskDispatcher, RedisTaskQueue
 from auth import AuthManager, AuthenticationError, AuthorizationError
 from metrics import MetricsRegistry
-from readiness import ReadinessChecker
 
 
 class AIOpsAgentTests(unittest.TestCase):
-    def test_readiness_checker_reports_local_dependencies(self):
-        orchestrator = AIOpsOrchestrator()
-        current_time = [100.0]
-        checker = ReadinessChecker(
-            orchestrator,
-            cache_seconds=5,
-            clock=lambda: current_time[0],
-        )
-        result = checker.check()
-        self.assertEqual(result["status"], "ready")
-        self.assertEqual(result["checks"]["storage"]["status"], "ready")
-        self.assertEqual(result["checks"]["event_bus"]["status"], "ready")
-        self.assertEqual(result["checks"]["topology"]["status"], "ready")
-        self.assertEqual(result["checks"]["llm"]["status"], "disabled")
-        orchestrator.store.close()
-        self.assertEqual(checker.check()["status"], "ready")
-        current_time[0] = 106.0
-        self.assertEqual(checker.check()["status"], "not_ready")
-        orchestrator.close()
-
-    def test_http_readiness_endpoint_returns_503_for_closed_storage(self):
-        server = create_server(port=0)
-        server.orchestrator.store.close()
-        thread = Thread(target=server.serve_forever, daemon=True)
-        thread.start()
-        try:
-            with self.assertRaises(HTTPError) as unavailable:
-                urlopen(f"http://127.0.0.1:{server.server_port}/ready")
-            self.assertEqual(unavailable.exception.code, 503)
-            payload = json.loads(unavailable.exception.read())
-            self.assertEqual(payload["status"], "not_ready")
-            self.assertEqual(payload["checks"]["storage"]["status"], "not_ready")
-        finally:
-            server.shutdown()
-            server.server_close()
-            thread.join(timeout=2)
-
     def test_auth_manager_enforces_role_hierarchy_without_leaking_key(self):
         auth = AuthManager(
             {
@@ -133,8 +95,6 @@ class AIOpsAgentTests(unittest.TestCase):
         }).encode("utf-8")
         try:
             with urlopen(f"{base_url}/health") as response:
-                self.assertEqual(response.status, 200)
-            with urlopen(f"{base_url}/ready") as response:
                 self.assertEqual(response.status, 200)
             with self.assertRaises(HTTPError) as missing:
                 urlopen(f"{base_url}/api/v1/tasks")
@@ -481,10 +441,6 @@ class AIOpsAgentTests(unittest.TestCase):
                 self.flush_calls += 1
                 return 0
 
-            def list_topics(self, timeout):
-                self.metadata_timeout = timeout
-                return object()
-
         fake = FakeProducer()
         received_config = {}
 
@@ -494,12 +450,10 @@ class AIOpsAgentTests(unittest.TestCase):
 
         bus = KafkaEventBus(producer_factory=producer_factory)
         bus.publish("aiops.events", {"task_id": "t-1", "stage": "monitor"})
-        bus.health_check(timeout=0.5)
         self.assertEqual(received_config["acks"], "all")
         self.assertEqual(fake.messages[0]["topic"], "aiops.events")
         self.assertEqual(json.loads(fake.messages[0]["value"])["task_id"], "t-1")
         self.assertEqual(fake.flush_calls, 1)
-        self.assertEqual(fake.metadata_timeout, 0.5)
 
     def test_kafka_consumer_sends_failed_message_to_dlq(self):
         class FakeMessage:
@@ -643,9 +597,6 @@ class AIOpsAgentTests(unittest.TestCase):
         orchestrator = AIOpsOrchestrator()
         client = TestClient(create_app(orchestrator))
         self.assertEqual(client.get("/health").status_code, 200)
-        readiness = client.get("/ready")
-        self.assertEqual(readiness.status_code, 200)
-        self.assertEqual(readiness.json()["status"], "ready")
         response = client.post("/api/v1/incidents", json={
             "service": "order-service",
             "metric": "cpu",
@@ -702,9 +653,6 @@ class AIOpsAgentTests(unittest.TestCase):
             def session(self):
                 return self.session_obj
 
-            def verify_connectivity(self):
-                self.verified = True
-
             def close(self):
                 self.closed = True
 
@@ -716,8 +664,6 @@ class AIOpsAgentTests(unittest.TestCase):
             driver_factory=lambda uri, auth: driver,
         )
         self.assertEqual(provider.get_dependencies("payment-service"), ["mysql"])
-        provider.health_check()
-        self.assertTrue(driver.verified)
         provider.close()
         self.assertTrue(driver.closed)
 

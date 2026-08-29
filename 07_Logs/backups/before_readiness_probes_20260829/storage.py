@@ -117,15 +117,6 @@ class TaskStore:
             for row in rows
         ]
 
-    def health_check(self, timeout: float = 2.0) -> None:
-        """执行只读 SQL，确认 SQLite 连接可用。"""
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout 必须是正数")
-        with self._lock:
-            row = self._connection.execute("SELECT 1 AS healthy").fetchone()
-        if row is None or row["healthy"] != 1:
-            raise RuntimeError("SQLite 就绪检查失败")
-
     def close(self) -> None:
         with self._lock:
             if not self._closed:

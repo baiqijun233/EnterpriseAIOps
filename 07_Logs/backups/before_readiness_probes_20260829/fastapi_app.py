@@ -4,13 +4,9 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 
-def create_app(
-    orchestrator: Any | None = None,
-    auth_manager: Any | None = None,
-    readiness_checker: Any | None = None,
-) -> Any:
+def create_app(orchestrator: Any | None = None, auth_manager: Any | None = None) -> Any:
     try:
-        from fastapi import Depends, FastAPI, HTTPException, Response
+        from fastapi import Depends, FastAPI, HTTPException
         from fastapi.responses import PlainTextResponse
         from fastapi.security import APIKeyHeader
         from pydantic import BaseModel, Field
@@ -28,10 +24,6 @@ def create_app(
         from api_server import build_orchestrator
 
         orchestrator = build_orchestrator()
-    if readiness_checker is None:
-        from readiness import ReadinessChecker
-
-        readiness_checker = ReadinessChecker(orchestrator)
 
     class IncidentRequest(BaseModel):
         service: str
@@ -51,12 +43,11 @@ def create_app(
 
     app = FastAPI(
         title="Enterprise Multi-Agent AIOps",
-        version="1.2.0",
+        version="1.1.0",
         description="企业级多 Agent 智能运维系统 API",
         lifespan=lifespan,
     )
     app.state.auth_manager = auth_manager
-    app.state.readiness_checker = readiness_checker
 
     from auth import AuthenticationError, AuthorizationError
     from metrics import MetricsRegistry
@@ -82,13 +73,6 @@ def create_app(
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "healthy"}
-
-    @app.get("/ready")
-    def ready(response: Response) -> dict[str, Any]:
-        result = readiness_checker.check()
-        if result["status"] != "ready":
-            response.status_code = 503
-        return result
 
     @app.get("/metrics", response_class=PlainTextResponse)
     def metrics() -> str:

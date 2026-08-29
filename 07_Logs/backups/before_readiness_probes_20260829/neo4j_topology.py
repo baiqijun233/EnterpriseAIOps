@@ -47,12 +47,6 @@ class Neo4jTopologyProvider:
             rows = session.run(query, service=service.strip())
             return [str(row["name"]) for row in rows if row.get("name")]
 
-    def health_check(self, timeout: float = 2.0) -> None:
-        """验证 Neo4j 连通性，不写入图数据。"""
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout 必须是正数")
-        self._get_driver().verify_connectivity()
-
     def close(self) -> None:
         if self._driver is not None:
             self._driver.close()

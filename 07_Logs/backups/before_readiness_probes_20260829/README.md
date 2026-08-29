@@ -39,7 +39,6 @@ python -m fastapi_app
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-RestMethod http://127.0.0.1:8000/ready
 Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8000/api/v1/incidents -ContentType "application/json" -Body '{"service":"order-service","metric":"cpu","value":95,"baseline":[40,41,39,42,40]}'
 Invoke-RestMethod http://127.0.0.1:8000/api/v1/tasks
 # 对处于 awaiting_approval 的任务进行人工审批
@@ -63,9 +62,7 @@ $env:AIOPS_API_KEYS = ConvertTo-Json @{$apiKey = "admin"} -Compress
 Invoke-RestMethod http://127.0.0.1:8000/api/v1/tasks -Headers @{"X-API-Key" = $apiKey}
 ```
 
-角色权限按等级继承：`viewer` 可查看任务，`operator` 可额外提交告警，`approver` 可额外人工审批，`admin` 拥有全部权限。`/health`、`/ready` 和 `/metrics` 保持公开，便于存活检查、就绪检查和 Prometheus 抓取。密钥至少 16 位，只从环境变量读取，不会写入日志和接口响应；审批审计只保留角色和不可逆的 12 位 Key 指纹。
-
-`GET /health` 只表示 API 进程存活。`GET /ready` 实际执行 SQLite 只读查询，并对当前启用的 Kafka 读取元数据、对 Neo4j 验证连通性；结果缓存 5 秒。必需依赖失败时返回 HTTP 503 和结构化的 `checks`。LLM 只检查本地配置，不在就绪探针中调用生成接口，避免产生费用。
+角色权限按等级继承：`viewer` 可查看任务，`operator` 可额外提交告警，`approver` 可额外人工审批，`admin` 拥有全部权限。`/health` 和 `/metrics` 保持公开，便于存活检查和 Prometheus 抓取。密钥至少 16 位，只从环境变量读取，不会写入日志和接口响应；审批审计只保留角色和不可逆的 12 位 Key 指纹。
 
 参考仓库保存在上级项目的 `02_Source\reference_multi_agent_aiops`，仅用于对照架构；项目仓库通过 `.gitignore` 忽略其内容，参考仓库自身保留独立 Git 历史。
 

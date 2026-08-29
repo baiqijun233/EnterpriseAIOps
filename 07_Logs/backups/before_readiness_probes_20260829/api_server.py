@@ -15,7 +15,6 @@ from auth import AuthManager, AuthenticationError, AuthorizationError, AuthPrinc
 from event_bus import create_event_bus
 from llm_adapter import DeepSeekLLMClient, DeterministicLLMClient, OpenAICompatibleLLMClient
 from metrics import MetricsRegistry
-from readiness import ReadinessChecker
 from common.storage import TaskStore, record_to_dict
 from adapters.neo4j_topology import Neo4jTopologyProvider
 
@@ -84,15 +83,6 @@ class AIOpsRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/health":
             self._send_json({"status": "healthy"})
-            return
-        if parsed.path == "/ready":
-            readiness = self.server.readiness_checker.check()
-            status = (
-                HTTPStatus.OK
-                if readiness["status"] == "ready"
-                else HTTPStatus.SERVICE_UNAVAILABLE
-            )
-            self._send_json(readiness, status)
             return
         if parsed.path == "/metrics":
             self._send_text(metrics.render(), "text/plain; version=0.0.4")
@@ -239,7 +229,6 @@ class AIOpsHTTPServer(ThreadingHTTPServer):
         super().__init__(server_address, handler_class)
         self.orchestrator = build_orchestrator()
         self.auth_manager = resolved_auth_manager
-        self.readiness_checker = ReadinessChecker(self.orchestrator)
 
     def server_close(self) -> None:
         try:

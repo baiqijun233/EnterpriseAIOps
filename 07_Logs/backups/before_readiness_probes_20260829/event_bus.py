@@ -15,9 +15,6 @@ class EventBus(Protocol):
     def close(self) -> None:
         """释放底层连接。"""
 
-    def health_check(self, timeout: float = 2.0) -> None:
-        """执行只读就绪检查。"""
-
 
 class InMemoryEventBus:
     """本地开发和测试使用的事件总线。"""
@@ -49,10 +46,6 @@ class InMemoryEventBus:
 
     def close(self) -> None:
         return
-
-    def health_check(self, timeout: float = 2.0) -> None:
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout 必须是正数")
 
 
 class KafkaEventBus:
@@ -149,13 +142,6 @@ class KafkaEventBus:
             return True
         finally:
             consumer.close()
-
-    def health_check(self, timeout: float = 2.0) -> None:
-        """读取 Kafka 元数据，不发布消息。"""
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise ValueError("timeout 必须是正数")
-        producer = self._get_producer()
-        producer.list_topics(timeout=float(timeout))
 
     def _create_consumer(self, group_id: str) -> Any:
         config = {
