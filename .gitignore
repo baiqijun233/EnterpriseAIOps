@@ -14,3 +14,4 @@ venv/
 
 # The downloaded reference repository keeps its own Git history.
 02_Source/reference_multi_agent_aiops/
+07_Logs/backups/
