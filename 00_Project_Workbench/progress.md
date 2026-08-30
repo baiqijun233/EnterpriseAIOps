@@ -244,3 +244,9 @@
 - 统一章节标题、图标和路线图结构，修正导航锚点，未改动业务代码。
 - 删除“学习、求职展示”等弱化项目价值的表述，改为面向云原生与企业后端运维场景的项目定位。
 - 已核对 GitHub 远程状态：当前四个公开项目均尚未创建 Release、版本标签或 Deployment；后续可统一补充 v0.1.0 发布和 GHCR 镜像工作流。
+
+## 2026-08-30 - 踩坑经验沉淀
+
+- 将本项目公开发布过程中遇到的通用问题补入 `E:\Agent\00_Global_Workbench\01_Compounding_Pitfall_Log.md`：GitHub 主页勾选项不等于 Release、Package 或 Deployment；公开提交必须隔离内部备份；发布对象需要逐项真实验证。
+- 修改全局日志前已保留回滚副本：`07_Logs\backups\before_global_pitfall_update_20260830\01_Compounding_Pitfall_Log.md`。
+- 本次只更新规则和记录，没有改动业务源码；项目仓库未执行远程推送。
