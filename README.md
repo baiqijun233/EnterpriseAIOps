@@ -14,29 +14,45 @@
 
 </div>
 
-EnterpriseAIOps 将异常检测、拓扑分析、修复建议和变更审批串成可恢复的任务链路，适合云原生服务、内部平台和后端系统的运维自动化。默认使用离线数据和 dry-run 执行，便于在接入真实基础设施前验证流程与安全边界。
+EnterpriseAIOps 将监控告警、异常检测、拓扑分析、修复建议和变更审批串成可恢复的任务链路，适合云原生服务、内部平台和企业后端系统。默认使用离线数据和 dry-run 执行，先验证流程与安全边界，再接入真实基础设施。
+
+<details>
+<summary>快速导航</summary>
+
+[项目预览](#项目预览) · [核心能力](#核心能力) · [运行架构](#运行架构) · [快速开始](#快速开始) · [接口](#常用接口) · [配置](#配置与安全边界) · [测试](#测试与验证) · [路线图](#当前边界与路线图)
+
+</details>
 
 ## 项目预览
 
-![接口文档](03_Assets/screenshots/enterprise-aiops-swagger.png)
+![API 文档](03_Assets/screenshots/enterprise-aiops-swagger.png)
 ![就绪检查](03_Assets/screenshots/ready-response.png)
 ![运行验收摘要](03_Assets/screenshots/verification-report.png)
 
+图片来自本地 API 和容器链路，展示接口、就绪探针和验收结果，不包含凭证或内部地址。
+
 ## 核心能力
 
-- 3-Sigma、EWMA、Isolation Forest 投票式异常检测。
-- 基于服务拓扑的 BFS 根因分析，可选接入检索或模型解释。
-- 任务状态、检查点、幂等审批和 SQLite/PostgreSQL 存储。
-- 内存事件总线或 Kafka，Celery + Redis 异步任务队列。
-- 限流、熔断、爆炸半径、角色权限、审计和 dry-run 安全护栏。
-- FastAPI 接口、Worker 就绪探针、Prometheus 指标和 Docker Compose。
+| 模块 | 已实现能力 | 默认模式 |
+| --- | --- | --- |
+| Agent 编排 | Monitor、RCA、Heal、Change 四阶段任务链路 | 本地同步 |
+| 异常检测 | 3-Sigma、EWMA、Isolation Forest 投票 | 标准库 |
+| 根因分析 | 拓扑 BFS、置信度计算、可选检索/模型解释 | JSON 拓扑 |
+| 状态与事件 | 检查点、幂等审批、内存总线或 Kafka | SQLite / 内存 |
+| 安全治理 | 限流、熔断、爆炸半径、角色权限、审计 | dry-run |
+| 异步与运维 | Celery、Redis、健康/就绪探针、Prometheus 指标 | 按需启用 |
 
 ## 运行架构
 
-```text
-告警 → Monitor → RCA → Heal → Change（审批） → Repair Executor
-                                  ├→ 事件总线（内存或 Kafka）
-                                  └→ 任务存储（SQLite 或 PostgreSQL）
+```mermaid
+flowchart LR
+    A[告警输入] --> B[Monitor\n异常确认]
+    B --> C[RCA\n拓扑根因]
+    C --> D[Heal\n动作建议]
+    D --> E[Change\n风险审批]
+    E --> F[Repair Executor\ndry-run / allowlist]
+    B -.事件.-> G[(内存总线或 Kafka)]
+    F -.状态.-> H[(SQLite 或 PostgreSQL)]
 ```
 
 ## 快速开始
@@ -48,7 +64,7 @@ python -m unittest discover -s 06_Tests -p 'test_*.py'
 & .\02_Source\agent_tech_portfolio\start_api.ps1
 ```
 
-另开终端检查接口：
+另开终端检查：
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/health
@@ -68,22 +84,28 @@ Invoke-RestMethod http://127.0.0.1:18024/health
 | --- | --- | --- |
 | GET | `/health` | 进程存活检查 |
 | GET | `/ready` | 存储、事件总线和执行器就绪检查 |
-| POST | `/api/v1/incidents` | 提交运维告警 |
+| POST | `/api/v1/incidents` | 提交一条运维告警 |
+| GET | `/api/v1/tasks` | 查询最近任务 |
 | GET | `/api/v1/tasks/{task_id}` | 查询任务详情 |
-| POST | `/api/v1/tasks/{task_id}/approval` | 恢复审批任务 |
-| GET | `/metrics` | Prometheus 指标 |
+| POST | `/api/v1/tasks/{task_id}/approval` | 恢复等待审批的任务 |
+| GET | `/metrics` | Prometheus 文本指标 |
 
 ## 配置与安全边界
 
-配置只通过环境变量注入，例如 `AIOPS_LLM`、`AIOPS_STORAGE`、`AIOPS_EVENT_BUS` 和 `AIOPS_REPAIR_EXECUTOR`。默认执行策略为 dry-run；allowlist 模式只接受显式参数列表并禁用任意 shell 字符串。外部模型、数据库、Kafka、Neo4j、Qdrant 等服务均为可选适配器，凭证不会写入仓库。
+配置通过环境变量注入，常用项包括 `AIOPS_LLM`、`AIOPS_STORAGE`、`AIOPS_EVENT_BUS`、`AIOPS_TOPOLOGY`、`AIOPS_RAG` 和 `AIOPS_REPAIR_EXECUTOR`。外部模型、数据库、Kafka、Neo4j、Qdrant 和 Redis 的凭证不会写入仓库。
+
+默认修复策略为 dry-run；allowlist 模式只接受显式参数列表，不执行任意 shell 字符串。模型不可用时会回退到离线分析，外部消息总线不可用时会记录错误并保留任务状态。
 
 ## 测试与验证
 
 ```powershell
 python -m unittest discover -s 06_Tests -p 'test_*.py'
 python -m compileall -q 02_Source 06_Tests
+docker compose -f .\02_Source\agent_tech_portfolio\docker-compose.production.yml config
 & .\02_Source\agent_tech_portfolio\verify.ps1
 ```
+
+当前本地基线为 52 项测试通过，覆盖检测、RCA、审批、存储、异步 Worker 和安全护栏。
 
 ## 项目结构
 
@@ -95,7 +117,7 @@ python -m compileall -q 02_Source 06_Tests
 ├─ common/                 存储和公共组件
 ├─ start_*.ps1             API/Worker 启动脚本
 ├─ Dockerfile              容器构建文件
-└─ docker-compose*.yml     本地与生产拓扑模板
+└─ docker-compose*.yml     本地与扩展拓扑模板
 ```
 
 ## 实现范围与第三方组件
@@ -104,7 +126,7 @@ python -m compileall -q 02_Source 06_Tests
 
 ## 当前边界与路线图
 
-当前版本可在离线模式和单机容器中验证完整流程；正式部署还需要企业数据库与消息集群、TLS/反向代理、集中式密钥管理、监控告警、变更平台回滚接口和压测数据。后续将完善全链路观测、CMDB 接口和灰度发布策略。
+当前版本可在离线模式和单机容器中验证完整流程。正式部署还需要企业数据库与消息集群、TLS/反向代理、集中式密钥管理、监控告警、变更平台回滚接口和压测数据；后续将完善全链路观测、CMDB 接口和灰度发布策略。
 
 ## 贡献、许可证与安全
 
