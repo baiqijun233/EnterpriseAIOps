@@ -15,3 +15,11 @@ venv/
 # The downloaded reference repository keeps its own Git history.
 02_Source/reference_multi_agent_aiops/
 07_Logs/backups/
+
+# Internal planning, logs and delivery artifacts are kept outside the public repository
+00_Project_Workbench/
+01_Requirements/
+05_Docs/
+07_Logs/
+08_Deliverables/
+04_Data/reference_*

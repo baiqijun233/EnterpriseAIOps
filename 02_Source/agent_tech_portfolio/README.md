@@ -97,7 +97,7 @@ Redis/Celery 适配器位于 `adapters\task_queue.py`，用于异步任务入队
 
 ```powershell
 $env:AIOPS_CELERY_BROKER = "redis://localhost:6379/0"
-& "E:\Agent\AIProjects\Project024_EnterpriseAIOps\02_Source\agent_tech_portfolio\start_worker.ps1"
+& ".\start_worker.ps1"
 ```
 
 也可以在源码目录手动执行 `celery -A celery_app:celery_app worker --pool=solo --concurrency=1 --loglevel=INFO`；脚本会自动设置绝对源码路径，因此不依赖当前工作目录。
@@ -115,8 +115,7 @@ Windows 本地验证建议使用 `--pool=solo`；停止 Worker 在终端按 `Ctr
 提交一条真实 AIOps 异步任务（需要 Worker 正在运行）：
 
 ```powershell
-$sourceDir = "E:\Agent\AIProjects\Project024_EnterpriseAIOps\02_Source\agent_tech_portfolio"
-$env:PYTHONPATH = $sourceDir
+$env:PYTHONPATH = (Get-Location).Path
 python -c "from celery_app import celery_app; r=celery_app.send_task('aiops.handle_incident', kwargs={'service':'order-service','metric':'cpu','value':95,'baseline':[40,41,39,42,40]}); print(r.get(timeout=30))"
 ```
 
