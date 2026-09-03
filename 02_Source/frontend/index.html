@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07131d">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2307131d'/%3E%3Cpath d='M8 16 16 8l8 8-8 8z' fill='none' stroke='%2353e1cc' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='3' fill='%237aa9ff'/%3E%3C/svg%3E">
+  <title>EnterpriseAIOps · 运维指挥中心</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="主导航">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><strong>Enterprise<span>AIOps</span></strong><small>运维指挥中心</small></div>
+      </div>
+      <div class="workspace-switcher">
+        <span class="workspace-dot"></span>
+        <span><small>当前工作区</small><strong id="workspace-name">生产环境 · 华东</strong></span>
+        <button class="icon-button" id="workspace-button" type="button" aria-label="切换工作区" title="切换工作区" aria-expanded="false">⌄</button><div class="workspace-menu" id="workspace-menu" hidden role="menu"><button type="button" data-workspace="生产环境 · 华东">生产环境 · 华东</button><button type="button" data-workspace="预发布 · 华北">预发布 · 华北</button><button type="button" data-workspace="开发环境 · 华南">开发环境 · 华南</button></div>
+      </div>
+      <nav class="nav-list">
+        <p class="nav-label">工作台</p>
+        <a class="nav-item active" href="#overview"><span class="nav-icon">◈</span>总览<span class="nav-count">12</span></a>
+        <a class="nav-item" href="#tasks"><span class="nav-icon">≡</span>任务流</a>
+        <a class="nav-item" href="#services"><span class="nav-icon">⌁</span>服务拓扑</a>
+        <p class="nav-label">智能体</p>
+        <a class="nav-item" href="#agents"><span class="nav-icon">✦</span>Agent 协同</a>
+        <a class="nav-item" href="#runbooks"><span class="nav-icon">▤</span>运行手册</a>
+        <p class="nav-label">治理</p>
+        <a class="nav-item" href="#audit"><span class="nav-icon">◌</span>审计记录</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sidebar-health"><span class="pulse-dot"></span><span>平台运行正常</span><time id="sidebar-sync">刚刚同步</time></div>
+        <button class="profile-button" id="profile-button" type="button" aria-label="打开个人资料" aria-expanded="false"><span class="avatar">林</span><span><strong>林一舟</strong><small>运维管理员</small></span><span class="more">•••</span></button>
+      </div>
+    </aside>
+
+    <main class="main-content" id="overview">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>工作台</span><b>/</b><strong>系统总览</strong></div>
+        <div class="topbar-actions">
+          <label class="api-status"><span class="status-dot" id="api-dot"></span><span id="api-label">演示数据</span></label>
+          <button class="icon-button" id="refresh-button" type="button" aria-label="刷新数据" title="刷新数据">↻</button>
+          <button class="secondary-button" id="theme-button" type="button"><span aria-hidden="true">◐</span> 外观</button>
+          <button class="primary-button" id="open-incident" type="button"><span aria-hidden="true">＋</span> 提交告警</button>
+        </div>
+      </header>
+
+      <section class="page-heading">
+        <div>
+          <p class="eyebrow">实时运维态势 <span class="live-line"><i></i> LIVE</span></p>
+          <h1>运维指挥中心</h1>
+          <p class="heading-copy">从异常确认到安全修复，掌握每一个正在发生的变化。</p>
+        </div>
+        <div class="heading-meta"><span class="ready-badge"><i></i> 系统就绪</span><span>数据更新于 <time id="last-sync">刚刚</time></span></div>
+      </section>
+
+      <section class="metric-grid" aria-label="关键指标">
+        <article class="metric-card accent-cyan"><div class="metric-top"><span>活跃任务</span><span class="metric-icon">◒</span></div><strong id="metric-active">12</strong><div class="metric-foot"><span class="trend up">↗ 8.3%</span><span>较昨日</span><span class="sparkline cyan" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></article>
+        <article class="metric-card accent-amber"><div class="metric-top"><span>待审批变更</span><span class="metric-icon">◇</span></div><strong id="metric-approval">3</strong><div class="metric-foot"><span class="trend warn">需要关注</span><span>高风险 1 项</span><span class="metric-bar"><i style="width: 42%"></i></span></div></article>
+        <article class="metric-card accent-blue"><div class="metric-top"><span>运行中 Agent</span><span class="metric-icon">✦</span></div><strong><span id="metric-agents">4</span><em>/ 4</em></strong><div class="metric-foot"><span class="trend up">全部在线</span><span>平均延迟 182ms</span><span class="sparkline blue" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></article>
+        <article class="metric-card accent-green"><div class="metric-top"><span>今日自动修复</span><span class="metric-icon">✓</span></div><strong id="metric-resolved">28</strong><div class="metric-foot"><span class="trend up">↗ 14.6%</span><span>成功率 96.4%</span><span class="sparkline green" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel task-panel" id="tasks">
+          <div class="panel-heading"><div><p class="section-kicker">ORCHESTRATION</p><h2>任务流</h2></div><div class="panel-actions"><button class="filter-button active" type="button" data-filter="all">全部 <span id="task-total">12</span></button><button class="filter-button" type="button" data-filter="awaiting_approval">待审批 <span id="task-pending">3</span></button><button class="filter-button" type="button" data-filter="resolved">已完成</button><button class="icon-button" id="more-filters" type="button" aria-label="更多任务筛选" title="更多任务筛选" aria-expanded="false">•••</button><div class="filter-menu" id="filter-menu" hidden role="menu"><button type="button" data-severity="all">全部风险</button><button type="button" data-severity="high">高风险</button><button type="button" data-severity="medium">中风险</button><button type="button" data-severity="low">低风险</button></div></div></div>
+          <div class="table-wrap"><table class="task-table"><thead><tr><th>任务 / 服务</th><th>当前阶段</th><th>风险</th><th>耗时</th><th>状态</th><th></th></tr></thead><tbody id="task-list"></tbody></table></div>
+          <div class="table-footer"><span id="task-summary">显示最近 5 条任务</span><button class="text-button" id="load-more" type="button">查看全部任务 <span>→</span></button></div>
+        </article>
+
+        <article class="panel agents-panel" id="agents">
+          <div class="panel-heading"><div><p class="section-kicker">MULTI-AGENT</p><h2>Agent 协同</h2></div><span class="online-count"><i></i> 4 在线</span></div>
+          <div class="agent-list" id="agent-list"></div>
+          <div class="agent-footer"><span>平均处理延迟</span><strong>182<span>ms</span></strong></div>
+        </article>
+      </section>
+
+      <section class="content-grid lower-grid">
+        <article class="panel services-panel" id="services">
+          <div class="panel-heading"><div><p class="section-kicker">INFRASTRUCTURE</p><h2>服务健康</h2></div><button class="text-button" type="button">查看拓扑 <span>→</span></button></div>
+          <div class="service-list" id="service-list"></div>
+        </article>
+        <article class="panel events-panel" id="audit">
+          <div class="panel-heading"><div><p class="section-kicker">EVENT STREAM</p><h2>实时事件</h2></div><span class="stream-status"><i></i> 流式接入</span></div>
+          <div class="event-list" id="event-list"></div>
+        </article>
+      </section>
+      <section class="panel runbook-panel" id="runbooks">
+        <div class="panel-heading"><div><p class="section-kicker">OPERATIONS LIBRARY</p><h2>运行手册</h2></div><span class="runbook-hint">常用处置流程</span></div>
+        <div class="runbook-list"><button type="button" class="runbook-item" data-runbook="CPU 持续升高"><strong>CPU 持续升高</strong><span>确认异常 → 定位节点 → 安全限流</span><i>→</i></button><button type="button" class="runbook-item" data-runbook="接口延迟升高"><strong>接口延迟升高</strong><span>检查依赖 → 评估影响 → 回滚或降级</span><i>→</i></button><button type="button" class="runbook-item" data-runbook="消息积压"><strong>消息积压</strong><span>查看消费组 → 扩容 → 复核堆积</span><i>→</i></button></div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="incident-modal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="incident-title">
+      <div class="modal-heading"><div><p class="section-kicker">NEW INCIDENT</p><h2 id="incident-title">提交一条运维告警</h2></div><button class="icon-button" id="close-incident" type="button" aria-label="关闭弹窗" title="关闭">×</button></div>
+      <p class="modal-copy">告警将进入 Monitor → RCA → Heal → Change 标准流程，默认使用安全的 dry-run 执行策略。</p>
+      <form id="incident-form">
+        <div class="form-grid"><label>服务名称<input name="service" value="checkout-api" required maxlength="80" placeholder="例如 checkout-api"></label><label>指标名称<input name="metric" value="cpu_usage" required maxlength="80" placeholder="例如 cpu_usage"></label><label>当前值<input name="value" type="number" step="any" value="96.4" required></label><label>严重等级<select name="severity"><option value="high">高 · High</option><option value="medium">中 · Medium</option><option value="low">低 · Low</option></select></label></div>
+        <label>基线值 <span class="field-hint">可选，用逗号分隔</span><input name="baseline" value="42, 44, 41, 43, 45" placeholder="例如 42, 44, 41, 43, 45"></label>
+        <div class="form-note"><span class="info-icon">i</span><span>未连接 API 时会以演示模式创建本地任务，不会发送任何外部请求。</span></div>
+        <div class="modal-actions"><button class="secondary-button" id="cancel-incident" type="button">取消</button><button class="primary-button" type="submit"><span>＋</span> 提交告警</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
+
