@@ -16,6 +16,7 @@
   <a href="#project-preview">项目预览</a> ·
   <a href="#features">核心能力</a> ·
   <a href="#architecture">运行架构</a> ·
+  <a href="#console">运维指挥中心</a> ·
   <a href="#quick-start">快速开始</a> ·
   <a href="#verification">测试验证</a> ·
   <a href="#roadmap">路线图</a>
@@ -25,7 +26,7 @@
 
 EnterpriseAIOps 将监控告警、异常检测、拓扑分析、修复建议和变更审批串成可恢复的任务链路，适合云原生服务、内部平台和企业后端系统。默认使用离线数据和 dry-run 执行，先验证流程与安全边界，再接入真实基础设施。
 
-> **当前版本 · v0.1.0**：52 项自动化测试通过；离线 API、审批恢复、异步 Worker、持久化与 Docker Compose 链路均已完成本机验证。默认修复策略为 dry-run，不会直接执行任意系统命令。
+> **当前版本 · v0.1.1**：新增运维指挥中心前端；52 项自动化测试通过，离线 API、审批恢复、异步 Worker、持久化与 Docker Compose 链路均已完成本机验证。默认修复策略为 dry-run，不会直接执行任意系统命令。
 
 <a id="project-preview"></a>
 
@@ -37,6 +38,10 @@ EnterpriseAIOps 将监控告警、异常检测、拓扑分析、修复建议和�
   <tr>
     <td width="50%"><strong>API 文档</strong><br><img src="03_Assets/screenshots/enterprise-aiops-swagger.png" alt="EnterpriseAIOps API 文档"></td>
     <td width="50%"><strong>就绪检查</strong><br><img src="03_Assets/screenshots/ready-response.png" alt="EnterpriseAIOps 就绪检查"></td>
+  </tr>
+  <tr>
+    <td width="50%"><strong>运维指挥中心</strong><br><img src="03_Assets/screenshots/frontend-console-desktop.png" alt="EnterpriseAIOps 运维指挥中心"></td>
+    <td width="50%"><strong>移动端适配</strong><br><img src="03_Assets/screenshots/frontend-console-mobile.png" alt="EnterpriseAIOps 运维指挥中心移动端"></td>
   </tr>
   <tr>
     <td colspan="2"><strong>运行验收摘要</strong><br><img src="03_Assets/screenshots/verification-report.png" alt="EnterpriseAIOps 运行验收摘要"></td>
@@ -79,6 +84,12 @@ flowchart TB
     F -.-> H["任务状态<br/>SQLite 或 PostgreSQL"]
 ```
 
+<a id="console"></a>
+
+## 🖥️ 运维指挥中心
+
+前端控制台位于 02_Source/frontend，提供总览指标、任务流筛选、Agent 协同、服务健康、实时事件和告警提交等操作。FastAPI 与生产容器会在 /console/ 提供静态页面。
+
 <a id="quick-start"></a>
 
 ## ⚡ 快速开始
@@ -97,6 +108,8 @@ Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/ready
 ```
 
+浏览器打开 `http://127.0.0.1:8000/console/` 可进入运维指挥中心。
+
 容器方式：
 
 ```powershell
@@ -104,17 +117,19 @@ docker compose -f .\02_Source\agent_tech_portfolio\docker-compose.production.yml
 Invoke-RestMethod http://127.0.0.1:18024/health
 ```
 
+容器模式下访问 `http://127.0.0.1:18024/console/`。
+
 ## 📦 已发布版本
 
-- Release：[EnterpriseAIOps v0.1.0](https://github.com/baiqijun233/EnterpriseAIOps/releases/tag/v0.1.0)
+- Release：[EnterpriseAIOps v0.1.1](https://github.com/baiqijun233/EnterpriseAIOps/releases/tag/v0.1.1)
 - Container：`ghcr.io/baiqijun233/enterpriseaiops`
 
 ```powershell
-docker pull ghcr.io/baiqijun233/enterpriseaiops:0.1.0
+docker pull ghcr.io/baiqijun233/enterpriseaiops:0.1.1
 docker pull ghcr.io/baiqijun233/enterpriseaiops:latest
 ```
 
-两个标签的公开镜像清单已验证可读取；生产环境建议固定使用版本标签。
+`0.1.1` 与 `latest` 标签由 GitHub Actions 在版本标签推送后发布；生产环境建议固定使用版本标签。
 
 ## 🔌 常用接口
 
@@ -166,14 +181,16 @@ docker compose -f .\02_Source\agent_tech_portfolio\docker-compose.production.yml
 ## 📁 项目结构
 
 ```text
-02_Source/agent_tech_portfolio/
-├─ aiops_agent.py          任务编排与安全策略
-├─ api_server.py           HTTP API 入口
-├─ adapters/               Redis、Neo4j、队列等适配器
-├─ common/                 存储和公共组件
-├─ start_*.ps1             API/Worker 启动脚本
-├─ Dockerfile              容器构建文件
-└─ docker-compose*.yml     本地与扩展拓扑模板
+02_Source/
+├─ frontend/                  运维指挥中心静态前端
+└─ agent_tech_portfolio/       后端服务与部署配置
+   ├─ aiops_agent.py           任务编排与安全策略
+   ├─ api_server.py            HTTP API 入口
+   ├─ adapters/                Redis、Neo4j、队列等适配器
+   ├─ common/                  存储和公共组件
+   ├─ start_*.ps1              API/Worker 启动脚本
+   ├─ Dockerfile               容器构建文件
+   └─ docker-compose*.yml      本地与扩展拓扑模板
 ```
 
 ## 🧱 实现范围与第三方组件

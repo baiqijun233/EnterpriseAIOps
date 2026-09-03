@@ -899,6 +899,9 @@ class AIOpsAgentTests(unittest.TestCase):
         readiness = client.get("/ready")
         self.assertEqual(readiness.status_code, 200)
         self.assertEqual(readiness.json()["status"], "ready")
+        console = client.get("/console/")
+        self.assertEqual(console.status_code, 200)
+        self.assertIn("运维指挥中心", console.text)
         response = client.post("/api/v1/incidents", json={
             "service": "order-service",
             "metric": "cpu",

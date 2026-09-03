@@ -1,6 +1,7 @@
 """FastAPI 正式入口，依赖按需加载，默认离线 HTTP 服务不受影响。"""
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 
@@ -13,6 +14,7 @@ def create_app(
         from fastapi import Depends, FastAPI, HTTPException, Response
         from fastapi.responses import PlainTextResponse
         from fastapi.security import APIKeyHeader
+        from fastapi.staticfiles import StaticFiles
         from pydantic import BaseModel, Field
     except ImportError as exc:
         raise RuntimeError(
@@ -57,6 +59,14 @@ def create_app(
     )
     app.state.auth_manager = auth_manager
     app.state.readiness_checker = readiness_checker
+
+    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+    if frontend_dir.is_dir():
+        app.mount(
+            "/console",
+            StaticFiles(directory=str(frontend_dir), html=True),
+            name="console",
+        )
 
     from auth import AuthenticationError, AuthorizationError
     from metrics import MetricsRegistry
